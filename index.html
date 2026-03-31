@@ -149,7 +149,7 @@
                 <select x-model="tournament.bracketFormat"
                     class="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base">
                     <option value="round-robin">Round Robin + Knockout (Group → QF → SF → Finals)</option>
-                    <option value="group-stage">Group Stage (4 Groups → Semi-Finals → Finals)</option>
+                    <option value="group-stage">Group Stage (4 Groups → QF → Semi-Finals → Finals)</option>
                     <option value="single-elimination">Single Elimination</option>
                     <option value="double-elimination">Double Elimination</option>
                 </select>
@@ -188,9 +188,10 @@
                             <strong>Group Stage Format:</strong>
                             <br>1. Assign teams to Groups A, B, C, or D in the Teams Management tab
                             <br>2. Each team plays all other teams in their group (3 points per win)
-                            <br>3. Semi-Finals: Winner of Group A vs Winner of Group B, Winner of Group C vs Winner of
-                            Group D
-                            <br>4. Final: Winners of the two semi-finals compete for the championship
+                            <br>3. Quarter-Finals: Winners face runner-ups from different groups (A vs C-2nd, B vs
+                            D-2nd, C vs A-2nd, D vs B-2nd)
+                            <br>4. Semi-Finals: QF winners advance (QF1 vs QF3 winner, QF2 vs QF4 winner)
+                            <br>5. Final: Semi-final winners compete for the championship
                         </span>
                     </template>
                     <template
@@ -623,14 +624,25 @@
                         </template>
 
                         <template x-for="match in getMatchesByRound(selectedRound)" :key="match.id">
-                            <div class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow"
-                                :class="match.winner ? 'bg-green-50 border-green-200' : ''">
+                            <div class="border rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow" :class="{
+                                    'bg-green-50 border-green-200': match.winner,
+                                    'bg-blue-50 border-blue-200': !match.winner && match.hasScores(),
+                                    'border-gray-200': !match.hasScores()
+                                }">
                                 <div
                                     class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4 gap-2">
                                     <h3 class="font-semibold text-gray-800 text-sm sm:text-base">
                                         Match #<span x-text="match.matchNumber"></span>
                                         <span x-show="match.winner" class="ml-2 text-green-600 text-xs sm:text-sm">
                                             <i class="fas fa-check-circle"></i> Complete
+                                        </span>
+                                        <span x-show="!match.winner && match.hasScores()"
+                                            class="ml-2 text-blue-600 text-xs sm:text-sm">
+                                            <i class="fas fa-edit"></i> In Progress
+                                        </span>
+                                        <span x-show="match.hasScores()"
+                                            class="ml-2 px-2 py-1 bg-gray-600 text-white rounded text-xs">
+                                            <i class="fas fa-save"></i> Saved
                                         </span>
                                     </h3>
                                     <span class="text-xs sm:text-sm text-gray-500"

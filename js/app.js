@@ -431,8 +431,9 @@ function tournamentApp() {
 
             if (this.tournament.bracketFormat === 'group-stage') {
                 if (round === 1) return 'Group Stage';
-                if (round === 2) return 'Semi-Finals';
-                if (round === 3) return 'Finals';
+                if (round === 2) return 'Quarter-Finals';
+                if (round === 3) return 'Semi-Finals';
+                if (round === 4) return 'Finals';
                 return `Round ${round}`;
             }
 

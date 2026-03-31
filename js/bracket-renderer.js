@@ -384,8 +384,18 @@ class BracketRenderer {
         console.log(`drawMatch called at (${x}, ${y}), match:`, match);
 
         const hasWinner = !!match.winner;
-        const borderColor = hasWinner ? this.colors.winnerBorder : this.colors.matchBorder;
-        const bgColor = this.colors.matchBg;
+        const hasScores = match.hasScores && match.hasScores();
+
+        // Determine border color and background based on match state
+        let borderColor = this.colors.matchBorder;
+        let bgColor = this.colors.matchBg;
+
+        if (hasWinner) {
+            borderColor = this.colors.winnerBorder;
+        } else if (hasScores) {
+            borderColor = '#3b82f6'; // Blue for matches with scores but incomplete
+            bgColor = '#eff6ff'; // Light blue background
+        }
 
         // Store for click detection
         this.matchBoxes.push({ match, x, y, width: this.matchWidth, height: this.matchHeight });
@@ -393,10 +403,35 @@ class BracketRenderer {
         // Draw match box - minimal design
         this.ctx.strokeStyle = borderColor;
         this.ctx.fillStyle = bgColor;
-        this.ctx.lineWidth = hasWinner ? 2.5 : 1.5;
+        this.ctx.lineWidth = hasWinner ? 2.5 : (hasScores ? 2 : 1.5);
         this.roundRect(x, y, this.matchWidth, this.matchHeight, 4);
         this.ctx.fill();
         this.ctx.stroke();
+
+        // Draw status indicator icon (top-right corner)
+        if (hasWinner) {
+            this.ctx.fillStyle = '#16a34a';
+            this.ctx.font = '12px "Font Awesome 6 Free"';
+            this.ctx.textAlign = 'right';
+            this.ctx.fillText('\uf058', x + this.matchWidth - 8, y + 12); // Check circle icon
+        } else if (hasScores) {
+            this.ctx.fillStyle = '#3b82f6';
+            this.ctx.font = '12px "Font Awesome 6 Free"';
+            this.ctx.textAlign = 'right';
+            this.ctx.fillText('\uf303', x + this.matchWidth - 8, y + 12); // Edit icon
+        }
+
+        // Draw "SAVED" badge for matches with scores (top-left corner)
+        if (hasScores) {
+            this.ctx.fillStyle = '#4b5563';
+            this.ctx.fillRect(x + 4, y + 4, 40, 14);
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = 'bold 9px Inter, system-ui, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('SAVED', x + 24, y + 13);
+        }
+
+        this.ctx.textAlign = 'left';
 
         // Draw teams - improved readability
         this.ctx.font = '14px Inter, system-ui, -apple-system, sans-serif';
@@ -448,6 +483,40 @@ class BracketRenderer {
             this.ctx.fillText('FINALS', x + this.matchWidth / 2, y - 8);
             this.ctx.textAlign = 'left';
         }
+    }
+
+    /**
+     * Draw a placeholder match box with TBD teams
+     */
+    drawPlaceholderMatch(label, x, y, width = this.matchWidth, height = this.matchHeight, team1Text = 'TBD', team2Text = 'TBD') {
+        // Draw match box with subtle styling
+        this.ctx.strokeStyle = '#d1d5db';
+        this.ctx.fillStyle = '#f9fafb';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([4, 4]); // Dashed border for placeholder
+        this.roundRect(x, y, width, height, 4);
+        this.ctx.fill();
+        this.ctx.stroke();
+        this.ctx.setLineDash([]); // Reset line dash
+
+        // Draw team 1 (TBD)
+        this.ctx.fillStyle = '#9ca3af';
+        this.ctx.font = 'italic 13px Inter, system-ui, sans-serif';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(team1Text, x + 8, y + 26);
+
+        // Draw separator
+        this.ctx.strokeStyle = '#e5e7eb';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y + height / 2);
+        this.ctx.lineTo(x + width, y + height / 2);
+        this.ctx.stroke();
+
+        // Draw team 2 (TBD)
+        this.ctx.fillStyle = '#9ca3af';
+        this.ctx.font = 'italic 13px Inter, system-ui, sans-serif';
+        this.ctx.fillText(team2Text, x + 8, y + 52);
     }
 
     /**
@@ -596,18 +665,21 @@ class BracketRenderer {
 
         const groupWidth = 200;
         const groupHeight = 280;
-        const horizontalGap = 150; // Gap between groups and semi-finals
-        const semiToFinalsGap = 180; // Gap between semi-finals and finals
+        const horizontalGap = 150; // Gap between groups and quarter-finals
+        const qfToSemiGap = 160; // Gap between quarter-finals and semi-finals
+        const semiToFinalsGap = 160; // Gap between semi-finals and finals
         const verticalSpacing = 40;
         const leftX = 50;
         const centerY = height / (2 * this.zoom) - this.panY / this.zoom;
 
-        // Calculate all X positions from left to right
+        // Calculate all X positions from left to right: Groups → QF → SF → Finals
         const groupsLeftX = leftX;
-        const semi1X = groupsLeftX + groupWidth + horizontalGap;
-        const finalsX = semi1X + this.matchWidth + semiToFinalsGap;
-        const semi2X = finalsX + this.matchWidth + semiToFinalsGap;
-        const groupsRightX = semi2X + this.matchWidth + horizontalGap;
+        const qfLeftX = groupsLeftX + groupWidth + horizontalGap; // Left side QFs (QF1, QF3)
+        const semiLeftX = qfLeftX + this.matchWidth + qfToSemiGap; // Left semi-final
+        const finalsX = semiLeftX + this.matchWidth + semiToFinalsGap; // Finals in center
+        const semiRightX = finalsX + this.matchWidth + semiToFinalsGap; // Right semi-final
+        const qfRightX = semiRightX + this.matchWidth + qfToSemiGap; // Right side QFs (QF2, QF4)
+        const groupsRightX = qfRightX + this.matchWidth + horizontalGap;
 
         // Position groups: A & B on left, C & D on right
         const groupPositions = {
@@ -617,10 +689,10 @@ class BracketRenderer {
             'D': { x: groupsRightX, y: centerY + verticalSpacing / 2 }
         };
 
-        // Draw each group
+        // Draw each group - showing matches instead of standings
         groups.forEach(group => {
             const pos = groupPositions[group];
-            const standings = this.app.getGroupStandings(group);
+            const groupMatches = this.app.getGroupMatches(group);
             const colors = groupColors[group];
 
             // Draw group container
@@ -642,65 +714,81 @@ class BracketRenderer {
             this.ctx.font = '12px Arial';
             this.ctx.fillText('Group Stage', pos.x + groupWidth / 2, pos.y - 10);
 
-            // Draw standings - limit to prevent spillage
-            this.ctx.fillStyle = '#374151';
-            this.ctx.font = '13px Arial';
+            // Draw match count
+            this.ctx.fillStyle = '#6b7280';
+            this.ctx.font = '11px Arial';
+            this.ctx.fillText(`${groupMatches.length} matches`, pos.x + groupWidth / 2, pos.y + 50);
             this.ctx.textAlign = 'left';
 
-            const maxTeamsToShow = 7; // Limit teams to prevent spillage
-            const teamsToShow = standings.slice(0, maxTeamsToShow);
+            // Draw compact match list
+            this.ctx.fillStyle = '#374151';
+            this.ctx.font = '10px Arial';
 
-            teamsToShow.forEach((standing, index) => {
-                const teamName = this.app.getTeamName(standing.teamId);
-                const yPos = pos.y + 55 + index * 28;
+            const maxMatchesToShow = 8;
+            const matchesToShow = groupMatches.slice(0, maxMatchesToShow);
+
+            matchesToShow.forEach((match, index) => {
+                const yPos = pos.y + 70 + index * 24;
 
                 // Check if we're within bounds
-                if (yPos + 20 > pos.y + groupHeight) return;
+                if (yPos + 20 > pos.y + groupHeight - 10) return;
+
+                const team1Name = this.app.getTeamName(match.team1Id);
+                const team2Name = this.app.getTeamName(match.team2Id);
 
                 // Highlight winner
-                if (standing.isWinner) {
-                    this.ctx.fillStyle = colors.border;
-                    this.ctx.globalAlpha = 0.15;
-                    this.ctx.fillRect(pos.x + 10, yPos - 15, groupWidth - 20, 24);
-                    this.ctx.globalAlpha = 1;
+                if (match.winner) {
                     this.ctx.fillStyle = colors.text;
-                    this.ctx.font = 'bold 13px Arial';
+                    this.ctx.font = 'bold 10px Arial';
+                } else if (match.hasScores && match.hasScores()) {
+                    this.ctx.fillStyle = '#3b82f6';
+                    this.ctx.font = '10px Arial';
                 } else {
                     this.ctx.fillStyle = '#6b7280';
-                    this.ctx.font = '13px Arial';
+                    this.ctx.font = '10px Arial';
                 }
 
-                // Truncate name to fit
-                const displayName = teamName.length > 14 ? teamName.substring(0, 14) + '...' : teamName;
-                this.ctx.fillText(`${index + 1}. ${displayName}`, pos.x + 15, yPos);
+                // Truncate names
+                const displayName1 = team1Name.length > 8 ? team1Name.substring(0, 8) + '...' : team1Name;
+                const displayName2 = team2Name.length > 8 ? team2Name.substring(0, 8) + '...' : team2Name;
 
-                // Draw points
-                this.ctx.textAlign = 'right';
-                this.ctx.fillText(`${standing.points}pts`, pos.x + groupWidth - 15, yPos);
-                this.ctx.textAlign = 'left';
+                this.ctx.fillText(`${displayName1} vs ${displayName2}`, pos.x + 10, yPos);
+
+                // Show result if available
+                if (match.winner) {
+                    this.ctx.fillStyle = '#16a34a';
+                    this.ctx.font = 'bold 9px Arial';
+                    this.ctx.fillText('✓', pos.x + groupWidth - 20, yPos);
+                } else if (match.hasScores && match.hasScores()) {
+                    this.ctx.fillStyle = '#3b82f6';
+                    this.ctx.font = '9px Arial';
+                    this.ctx.fillText('•', pos.x + groupWidth - 20, yPos);
+                }
             });
 
-            // Show "+X more" if there are more teams
-            if (standings.length > maxTeamsToShow) {
-                const remainingCount = standings.length - maxTeamsToShow;
+            // Show "+X more" if there are more matches
+            if (groupMatches.length > maxMatchesToShow) {
+                const remainingCount = groupMatches.length - maxMatchesToShow;
                 this.ctx.fillStyle = '#9ca3af';
-                this.ctx.font = 'italic 11px Arial';
+                this.ctx.font = 'italic 10px Arial';
                 this.ctx.textAlign = 'center';
                 this.ctx.fillText(`+${remainingCount} more`, pos.x + groupWidth / 2, pos.y + groupHeight - 15);
             }
         });
 
-        // Draw finals in the center
+        // Draw finals in the center - ALWAYS show (with TBD if not created)
         const finalsY = centerY - this.matchHeight / 2;
-        const finalsMatch = this.app.getMatchesByRound(3);
-        if (finalsMatch.length > 0 && finalsMatch[0]) {
-            this.drawMatch(finalsMatch[0], finalsX, finalsY, true);
+        const finalsMatch = this.app.getMatchesByRound(4); // Round 4 = Finals
 
-            // Draw "Final" label
-            this.ctx.fillStyle = '#1f2937';
-            this.ctx.font = 'bold 16px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('Final', finalsX + this.matchWidth / 2, finalsY - 15);
+        // Draw "Final" label
+        this.ctx.fillStyle = '#1f2937';
+        this.ctx.font = 'bold 16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Final', finalsX + this.matchWidth / 2, finalsY - 15);
+
+        if (finalsMatch.length > 0 && finalsMatch[0]) {
+            // Draw actual final match
+            this.drawMatch(finalsMatch[0], finalsX, finalsY, true);
 
             // Draw trophy
             const trophyX = finalsX + this.matchWidth / 2;
@@ -730,95 +818,189 @@ class BracketRenderer {
                     }
                 }
             }
+        } else {
+            // Draw placeholder final match
+            this.drawPlaceholderMatch('Final', finalsX, finalsY, this.matchWidth, this.matchHeight, 'Winner Semi 1', 'Winner Semi 2');
         }
 
-        // Draw semi-finals on the sides of finals
-        const semiMatches = this.app.getMatchesByRound(2);
-        if (semiMatches.length > 0) {
-            // Semi 1: Group A vs Group C (LEFT side of finals)
-            const semi1Y = finalsY;
-            if (semiMatches[0]) {
-                this.drawMatch(semiMatches[0], semi1X, semi1Y);
+        // Draw quarter-finals - ALWAYS show (with TBD if not created)
+        const qfMatches = this.app.getMatchesByRound(2); // Round 2 = Quarter-finals
+        const qfVerticalGap = 100;
 
-                // Draw "Semi Final" label
-                this.ctx.fillStyle = '#6b7280';
-                this.ctx.font = 'bold 14px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('Semi Final', semi1X + this.matchWidth / 2, semi1Y - 10);
-            }
+        // QF1: Winner A vs Runner-up C (LEFT side, top)
+        const qf1Y = centerY - this.matchHeight - qfVerticalGap / 2;
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Quarter Final 1', qfLeftX + this.matchWidth / 2, qf1Y - 10);
 
-            // Semi 2: Group B vs Group D (RIGHT side of finals)
-            const semi2Y = finalsY;
-            if (semiMatches[1]) {
-                this.drawMatch(semiMatches[1], semi2X, semi2Y);
-
-                // Draw "Semi Final" label
-                this.ctx.fillStyle = '#6b7280';
-                this.ctx.font = 'bold 14px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('Semi Final', semi2X + this.matchWidth / 2, semi2Y - 10);
-            }
+        if (qfMatches.length > 0 && qfMatches[0]) {
+            this.drawMatch(qfMatches[0], qfLeftX, qf1Y);
+        } else {
+            this.drawPlaceholderMatch('QF1', qfLeftX, qf1Y, this.matchWidth, this.matchHeight, 'Winner A', 'Runner-up C');
         }
 
-        // Draw connector lines after all boxes are drawn
-        if (semiMatches.length > 0) {
-            this.ctx.strokeStyle = '#94a3b8';
-            this.ctx.lineWidth = 2;
+        // QF3: Winner C vs Runner-up A (LEFT side, bottom)
+        const qf3Y = centerY + qfVerticalGap / 2;
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Quarter Final 3', qfLeftX + this.matchWidth / 2, qf3Y - 10);
 
-            // Group A → Semi 1 (left groups to left semi-final)
-            if (semiMatches[0]) {
-                const semi1Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight / 2);
-                this.ctx.lineTo(semi1X, semi1Y + this.matchHeight / 3);
-                this.ctx.stroke();
-            }
-
-            // Group B → Semi 1 (left groups to left semi-final)
-            if (semiMatches[0]) {
-                const semi1Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + groupHeight / 2);
-                this.ctx.lineTo(semi1X, semi1Y + (this.matchHeight * 2 / 3));
-                this.ctx.stroke();
-            }
-
-            // Group C → Semi 2 (right groups to right semi-final)
-            if (semiMatches[1]) {
-                const semi2Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + groupHeight / 2);
-                this.ctx.lineTo(semi2X + this.matchWidth, semi2Y + this.matchHeight / 3);
-                this.ctx.stroke();
-            }
-
-            // Group D → Semi 2 (right groups to right semi-final)
-            if (semiMatches[1]) {
-                const semi2Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + groupHeight / 2);
-                this.ctx.lineTo(semi2X + this.matchWidth, semi2Y + (this.matchHeight * 2 / 3));
-                this.ctx.stroke();
-            }
-
-            // Semi 1 → Finals (left semi to center finals)
-            if (semiMatches[0]) {
-                const semi1Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(semi1X + this.matchWidth, semi1Y + this.matchHeight / 2);
-                this.ctx.lineTo(finalsX, finalsY + this.matchHeight / 2);
-                this.ctx.stroke();
-            }
-
-            // Semi 2 → Finals (right semi to center finals)
-            if (semiMatches[1]) {
-                const semi2Y = finalsY;
-                this.ctx.beginPath();
-                this.ctx.moveTo(semi2X, semi2Y + this.matchHeight / 2);
-                this.ctx.lineTo(finalsX + this.matchWidth, finalsY + this.matchHeight / 2);
-                this.ctx.stroke();
-            }
+        if (qfMatches.length > 2 && qfMatches[2]) {
+            this.drawMatch(qfMatches[2], qfLeftX, qf3Y);
+        } else {
+            this.drawPlaceholderMatch('QF3', qfLeftX, qf3Y, this.matchWidth, this.matchHeight, 'Winner C', 'Runner-up A');
         }
+
+        // QF2: Winner B vs Runner-up D (RIGHT side, top)
+        const qf2Y = centerY - this.matchHeight - qfVerticalGap / 2;
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Quarter Final 2', qfRightX + this.matchWidth / 2, qf2Y - 10);
+
+        if (qfMatches.length > 1 && qfMatches[1]) {
+            this.drawMatch(qfMatches[1], qfRightX, qf2Y);
+        } else {
+            this.drawPlaceholderMatch('QF2', qfRightX, qf2Y, this.matchWidth, this.matchHeight, 'Winner B', 'Runner-up D');
+        }
+
+        // QF4: Winner D vs Runner-up B (RIGHT side, bottom)
+        const qf4Y = centerY + qfVerticalGap / 2;
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Quarter Final 4', qfRightX + this.matchWidth / 2, qf4Y - 10);
+
+        if (qfMatches.length > 3 && qfMatches[3]) {
+            this.drawMatch(qfMatches[3], qfRightX, qf4Y);
+        } else {
+            this.drawPlaceholderMatch('QF4', qfRightX, qf4Y, this.matchWidth, this.matchHeight, 'Winner D', 'Runner-up B');
+        }
+
+        // Draw semi-finals - ALWAYS show (with TBD if not created)
+        const semiMatches = this.app.getMatchesByRound(3); // Round 3 = Semi-finals
+        const semi1Y = finalsY;
+        const semi2Y = finalsY;
+
+        // Semi 1: QF1 winner vs QF3 winner (LEFT side of finals)
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Semi Final 1', semiLeftX + this.matchWidth / 2, semi1Y - 10);
+
+        if (semiMatches.length > 0 && semiMatches[0]) {
+            this.drawMatch(semiMatches[0], semiLeftX, semi1Y);
+        } else {
+            this.drawPlaceholderMatch('Semi 1', semiLeftX, semi1Y, this.matchWidth, this.matchHeight, 'Winner QF1', 'Winner QF3');
+        }
+
+        // Semi 2: QF2 winner vs QF4 winner (RIGHT side of finals)
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = 'bold 14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Semi Final 2', semiRightX + this.matchWidth / 2, semi2Y - 10);
+
+        if (semiMatches.length > 1 && semiMatches[1]) {
+            this.drawMatch(semiMatches[1], semiRightX, semi2Y);
+        } else {
+            this.drawPlaceholderMatch('Semi 2', semiRightX, semi2Y, this.matchWidth, this.matchHeight, 'Winner QF2', 'Winner QF4');
+        }
+
+        // Draw connector lines - ALWAYS show to indicate tournament flow
+        this.ctx.strokeStyle = '#94a3b8';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([]);
+
+        // Groups to Quarter-finals
+        // Group A → QF1 (Winner A to top left QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight / 3);
+        this.ctx.lineTo(qfLeftX, qf1Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // Group C → QF1 (Runner-up C to top left QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + groupHeight / 3);
+        this.ctx.lineTo(qfRightX + this.matchWidth, qf1Y + this.matchHeight / 3);
+        this.ctx.lineTo(qfLeftX + this.matchWidth / 2, qf1Y + this.matchHeight / 3);
+        this.ctx.lineTo(qfLeftX + this.matchWidth, qf1Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // Group B → QF2 (Winner B to top right QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + groupHeight / 3);
+        this.ctx.lineTo(qfRightX, qf2Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // Group D → QF2 (Runner-up D to top right QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + groupHeight / 3);
+        this.ctx.lineTo(qfRightX + this.matchWidth, qf2Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // Group C → QF3 (Winner C to bottom left QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + (groupHeight * 2 / 3));
+        this.ctx.lineTo(qfLeftX, qf3Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // Group A → QF3 (Runner-up A to bottom left QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + (groupHeight * 2 / 3));
+        this.ctx.lineTo(qfLeftX + this.matchWidth, qf3Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // Group D → QF4 (Winner D to bottom right QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + (groupHeight * 2 / 3));
+        this.ctx.lineTo(qfRightX, qf4Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // Group B → QF4 (Runner-up B to bottom right QF)
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + (groupHeight * 2 / 3));
+        this.ctx.lineTo(qfRightX + this.matchWidth, qf4Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // Quarter-finals to Semi-finals
+        // QF1 → Semi 1
+        this.ctx.beginPath();
+        this.ctx.moveTo(qfLeftX + this.matchWidth, qf1Y + this.matchHeight / 2);
+        this.ctx.lineTo(semiLeftX, semi1Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // QF3 → Semi 1
+        this.ctx.beginPath();
+        this.ctx.moveTo(qfLeftX + this.matchWidth, qf3Y + this.matchHeight / 2);
+        this.ctx.lineTo(semiLeftX, semi1Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // QF2 → Semi 2
+        this.ctx.beginPath();
+        this.ctx.moveTo(qfRightX, qf2Y + this.matchHeight / 2);
+        this.ctx.lineTo(semiRightX + this.matchWidth, semi2Y + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // QF4 → Semi 2
+        this.ctx.beginPath();
+        this.ctx.moveTo(qfRightX, qf4Y + this.matchHeight / 2);
+        this.ctx.lineTo(semiRightX + this.matchWidth, semi2Y + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
+
+        // Semi-finals to Finals
+        // Semi 1 → Finals
+        this.ctx.beginPath();
+        this.ctx.moveTo(semiLeftX + this.matchWidth, semi1Y + this.matchHeight / 2);
+        this.ctx.lineTo(finalsX, finalsY + this.matchHeight / 3);
+        this.ctx.stroke();
+
+        // Semi 2 → Finals
+        this.ctx.beginPath();
+        this.ctx.moveTo(semiRightX, semi2Y + this.matchHeight / 2);
+        this.ctx.lineTo(finalsX + this.matchWidth, finalsY + (this.matchHeight * 2 / 3));
+        this.ctx.stroke();
 
         // Restore context
         this.ctx.restore();

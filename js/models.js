@@ -112,6 +112,14 @@ class Match {
         return null;
     }
 
+    /**
+     * Check if match has any scores saved
+     */
+    hasScores() {
+        return this.team1Set1 !== null || this.team1Set2 !== null || this.team1Set3 !== null ||
+            this.team2Set1 !== null || this.team2Set2 !== null || this.team2Set3 !== null;
+    }
+
     toJSON() {
         return {
             id: this.id,
@@ -317,8 +325,8 @@ class Tournament {
             }
         }
 
-        // Set total rounds: 1 (group) + 2 (semi-finals) + 1 (final) = 4
-        this.totalRounds = 3;
+        // Set total rounds: 1 (group) + 1 (quarter-finals) + 1 (semi-finals) + 1 (final)
+        this.totalRounds = 4;
     }
 
     /**
@@ -488,47 +496,93 @@ class Tournament {
         if (allComplete && !this.roundRobinComplete) {
             this.roundRobinComplete = true;
 
-            // Get winners from each group
+            // Get winners and runner-ups from each group
             const groups = ['A', 'B', 'C', 'D'];
             const groupWinners = {};
+            const groupRunnerUps = {};
 
             for (const group of groups) {
                 const winner = this.getGroupWinner(group);
-                if (winner) {
-                    groupWinners[group] = winner;
-                }
+                const runnerUp = this.getGroupRunnerUp(group);
+                if (winner) groupWinners[group] = winner;
+                if (runnerUp) groupRunnerUps[group] = runnerUp;
             }
 
-            // Create semi-finals: A vs B, C vs D (matching reference bracket layout)
-            if (groupWinners.A && groupWinners.B && groupWinners.C && groupWinners.D) {
-                // Semi-final 1: Winner of Group A vs Winner of Group B
+            // Create Quarter-finals with the specified matchups
+            if (groupWinners.A && groupWinners.B && groupWinners.C && groupWinners.D &&
+                groupRunnerUps.A && groupRunnerUps.B && groupRunnerUps.C && groupRunnerUps.D) {
+
+                // QF1: Winner A vs Runner-up C
+                const qf1 = new Match(
+                    'qf-1',
+                    groupWinners.A,
+                    groupRunnerUps.C,
+                    2, // Round 2 = Quarter-finals
+                    1,
+                    'quarter-finals'
+                );
+                this.matches.push(qf1);
+
+                // QF2: Winner B vs Runner-up D
+                const qf2 = new Match(
+                    'qf-2',
+                    groupWinners.B,
+                    groupRunnerUps.D,
+                    2, // Round 2 = Quarter-finals
+                    2,
+                    'quarter-finals'
+                );
+                this.matches.push(qf2);
+
+                // QF3: Winner C vs Runner-up A
+                const qf3 = new Match(
+                    'qf-3',
+                    groupWinners.C,
+                    groupRunnerUps.A,
+                    2, // Round 2 = Quarter-finals
+                    3,
+                    'quarter-finals'
+                );
+                this.matches.push(qf3);
+
+                // QF4: Winner D vs Runner-up B
+                const qf4 = new Match(
+                    'qf-4',
+                    groupWinners.D,
+                    groupRunnerUps.B,
+                    2, // Round 2 = Quarter-finals
+                    4,
+                    'quarter-finals'
+                );
+                this.matches.push(qf4);
+
+                // Create placeholder semi-finals (QF1 winner vs QF3 winner, QF2 winner vs QF4 winner)
                 const semi1 = new Match(
                     'semi-1',
-                    groupWinners.A,
-                    groupWinners.B,
-                    2, // Round 2 = Semi-finals
+                    null,
+                    null,
+                    3, // Round 3 = Semi-finals
                     1,
                     'semi-finals'
                 );
                 this.matches.push(semi1);
 
-                // Semi-final 2: Winner of Group C vs Winner of Group D
                 const semi2 = new Match(
                     'semi-2',
-                    groupWinners.C,
-                    groupWinners.D,
-                    2, // Round 2 = Semi-finals
+                    null,
+                    null,
+                    3, // Round 3 = Semi-finals
                     2,
                     'semi-finals'
                 );
                 this.matches.push(semi2);
 
-                // Create placeholder for finals (will be filled when semis complete)
+                // Create placeholder for finals
                 const final = new Match(
                     'final',
                     null,
                     null,
-                    3, // Round 3 = Finals
+                    4, // Round 4 = Finals
                     1,
                     'finals'
                 );
@@ -552,6 +606,23 @@ class Tournament {
         });
 
         return sorted[0].id;
+    }
+
+    /**
+     * Get the runner-up (2nd place) of a specific group
+     */
+    getGroupRunnerUp(group) {
+        const groupTeams = this.teams.filter(t => t.group === group);
+        if (groupTeams.length < 2) return null;
+
+        // Sort by points, then wins, then losses
+        const sorted = [...groupTeams].sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            if (b.wins !== a.wins) return b.wins - a.wins;
+            return a.losses - b.losses;
+        });
+
+        return sorted[1].id;
     }
 
     /**
@@ -660,19 +731,40 @@ class Tournament {
             m.round === nextRound && m.matchNumber === nextMatchNumber
         );
 
-        // For group-stage format, handle semi-finals advancing to finals
-        if (this.bracketFormat === 'group-stage' && match.stage === 'semi-finals') {
-            nextMatch = this.matches.find(m => m.stage === 'finals');
+        // For group-stage format, handle quarter-finals and semi-finals progression
+        if (this.bracketFormat === 'group-stage') {
+            // Quarter-finals advancing to semi-finals
+            if (match.stage === 'quarter-finals') {
+                // QF1 (match 1) and QF3 (match 3) → Semi 1
+                // QF2 (match 2) and QF4 (match 4) → Semi 2
+                const semiMatchNumber = (match.matchNumber === 1 || match.matchNumber === 3) ? 1 : 2;
+                nextMatch = this.matches.find(m => m.stage === 'semi-finals' && m.matchNumber === semiMatchNumber);
 
-            if (nextMatch) {
-                // Semi 1 winner goes to team1, Semi 2 winner goes to team2
-                if (match.matchNumber === 1) {
-                    nextMatch.team1Id = match.winner;
-                } else {
-                    nextMatch.team2Id = match.winner;
+                if (nextMatch) {
+                    // Odd QF numbers (1, 3) go to team1, even (2, 4) go to team2 of their respective semi
+                    if (match.matchNumber === 1 || match.matchNumber === 2) {
+                        nextMatch.team1Id = match.winner;
+                    } else {
+                        nextMatch.team2Id = match.winner;
+                    }
                 }
+                return;
             }
-            return;
+
+            // Semi-finals advancing to finals
+            if (match.stage === 'semi-finals') {
+                nextMatch = this.matches.find(m => m.stage === 'finals');
+
+                if (nextMatch) {
+                    // Semi 1 winner goes to team1, Semi 2 winner goes to team2
+                    if (match.matchNumber === 1) {
+                        nextMatch.team1Id = match.winner;
+                    } else {
+                        nextMatch.team2Id = match.winner;
+                    }
+                }
+                return;
+            }
         }
 
         // Create next match if it doesn't exist

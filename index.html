@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Badminton Tournament Bracket Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .bracket-line {
+            border-top: 2px solid #e5e7eb;
+            border-right: 2px solid #e5e7eb;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .winner-glow {
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+        }
+
+        /* Canvas bracket styling */
+        #bracketCanvas {
+            border-radius: 8px;
+            touch-action: none;
+            /* Prevent default touch behaviors */
+            -webkit-user-select: none;
+            /* Prevent text selection on touch */
+            user-select: none;
+        }
+
+        #bracketCanvas:active {
+            cursor: grabbing !important;
+        }
+
+        /* Mobile bottom navigation */
+        @media (max-width: 768px) {
+            body {
+                padding-bottom: 80px;
+            }
+
+            .mobile-nav {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: white;
+                border-top: 1px solid #e5e7eb;
+                box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+                z-index: 50;
+            }
+
+            .mobile-nav-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 0.75rem 0.5rem;
+                font-size: 0.75rem;
+                transition: all 0.2s;
+            }
+
+            .mobile-nav-item.active {
+                color: #2563eb;
+            }
+
+            .mobile-nav-item:disabled {
+                opacity: 0.4;
+                pointer-events: none;
+            }
+
+            .mobile-nav-item i {
+                font-size: 1.25rem;
+                margin-bottom: 0.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+    <div x-data="tournamentApp()" x-cloak class="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-4 sm:p-6 mb-4 sm:mb-8">
+            <h1 class="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2">
+                <i class="fas fa-trophy mr-2 sm:mr-3"></i>Badminton Tournament
+            </h1>
+            <p class="text-blue-100 text-sm sm:text-base hidden sm:block">Manage singles, doubles, and mixed-doubles
+                tournaments</p>
+        </div>
+
+        <!-- Desktop Navigation Tabs (Hidden on Mobile) -->
+        <div class="bg-white rounded-lg shadow-md mb-4 sm:mb-6 hidden md:block">
+            <div class="flex border-b">
+                <button @click="switchTab('setup')"
+                    :class="currentTab === 'setup' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                    class="px-4 lg:px-6 py-3 font-medium transition-colors hover:text-blue-600 text-sm lg:text-base">
+                    <i class="fas fa-cog mr-2"></i>Tournament Setup
+                </button>
+                <button @click="switchTab('teams')"
+                    :class="currentTab === 'teams' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                    class="px-4 lg:px-6 py-3 font-medium transition-colors hover:text-blue-600 text-sm lg:text-base">
+                    <i class="fas fa-users mr-2"></i>Teams Management
+                </button>
+                <button @click="switchTab('matches')"
+                    :class="currentTab === 'matches' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                    class="px-4 lg:px-6 py-3 font-medium transition-colors hover:text-blue-600 text-sm lg:text-base"
+                    :disabled="!tournament.isSetup">
+                    <i class="fas fa-clipboard-list mr-2"></i>Match Scores
+                </button>
+                <button @click="switchTab('bracket')"
+                    :class="currentTab === 'bracket' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                    class="px-4 lg:px-6 py-3 font-medium transition-colors hover:text-blue-600 text-sm lg:text-base"
+                    :disabled="!tournament.isSetup">
+                    <i class="fas fa-sitemap mr-2"></i>Bracket & Standings
+                </button>
+            </div>
+        </div>
+
+        <!-- Tournament Setup Tab -->
+        <div x-show="currentTab === 'setup'" class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+                <i class="fas fa-cog mr-2"></i>Tournament Configuration
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tournament Name</label>
+                    <input type="text" x-model="tournament.name"
+                        class="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        placeholder="e.g., City Championship 2026">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tournament Type</label>
+                    <select x-model="tournament.type" @change="resetTournament()"
+                        class="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base">
+                        <option value="singles">Singles</option>
+                        <option value="doubles">Doubles</option>
+                        <option value="mixed-doubles">Mixed Doubles</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-4 sm:mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Bracket Format</label>
+                <select x-model="tournament.bracketFormat"
+                    class="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base">
+                    <option value="round-robin">Round Robin + Knockout (Group → QF → SF → Finals)</option>
+                    <option value="single-elimination">Single Elimination</option>
+                    <option value="double-elimination">Double Elimination</option>
+                </select>
+            </div>
+
+            <div
+                class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 p-3 sm:p-4 bg-blue-50 rounded-lg">
+                <div>
+                    <p class="font-medium text-gray-800 text-sm sm:text-base">Tournament Status</p>
+                    <p class="text-xs sm:text-sm text-gray-600"
+                        x-text="tournament.isSetup ? 'Active - Ready for matches' : 'Not started - Add teams to begin'">
+                    </p>
+                </div>
+                <button @click="setupTournament()" :disabled="tournament.teams.length < 2"
+                    :class="tournament.teams.length < 2 ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'"
+                    class="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 text-white rounded-lg font-medium transition-colors text-sm sm:text-base">
+                    <i class="fas fa-play mr-2"></i>
+                    <span x-text="tournament.isSetup ? 'Reset Tournament' : 'Start Tournament'"></span>
+                </button>
+            </div>
+
+            <div class="mt-4 p-3 sm:p-4 bg-yellow-50 border-l-4 border-yellow-400">
+                <p class="text-xs sm:text-sm text-yellow-700">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <template x-if="tournament.bracketFormat === 'round-robin'">
+                        <span>
+                            <strong>Round Robin + Knockout Format:</strong>
+                            <br>1. Group Stage: Each team plays every other team (3 points per win)
+                            <br>2. Knockout: Top teams advance to Quarter-Finals → Semi-Finals → Finals
+                            <br>• 16+ teams: Top 16 advance | 8-15 teams: Top 8 advance | 4-7 teams: Top 4 advance | 2-3
+                            teams: Top 2 advance
+                        </span>
+                    </template>
+                    <template x-if="tournament.bracketFormat !== 'round-robin'">
+                        <span>Add at least 2 teams in the Teams Management tab, then click "Start Tournament" to
+                            generate the bracket.</span>
+                    </template>
+                </p>
+            </div>
+        </div>
+
+        <!-- Teams Management Tab -->
+        <div x-show="currentTab === 'teams'" class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+                <i class="fas fa-users mr-2"></i>Teams Management
+            </h2>
+
+            <!-- Add Team Form -->
+            <div class="mb-6 p-3 sm:p-4 bg-gray-50 rounded-lg">
+                <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Add New Team</h3>
+
+                <template x-if="tournament.type === 'singles'">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                        <input type="text" x-model="newTeam.player1" placeholder="Player Name"
+                            class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <input type="text" x-model="newTeam.seed" placeholder="Seed (optional)"
+                            class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <button @click="addTeam()"
+                            class="px-4 sm:px-6 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base">
+                            <i class="fas fa-plus mr-1 sm:mr-2"></i>Add Team
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="tournament.type === 'doubles' || tournament.type === 'mixed-doubles'">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                        <input type="text" x-model="newTeam.player1"
+                            :placeholder="tournament.type === 'mixed-doubles' ? 'Male Player' : 'Player 1'"
+                            class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <input type="text" x-model="newTeam.player2"
+                            :placeholder="tournament.type === 'mixed-doubles' ? 'Female Player' : 'Player 2'"
+                            class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <input type="text" x-model="newTeam.seed" placeholder="Seed (optional)"
+                            class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <button @click="addTeam()"
+                            class="px-4 sm:px-6 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base">
+                            <i class="fas fa-plus mr-1 sm:mr-2"></i>Add Team
+                        </button>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Teams List -->
+            <div class="space-y-2 sm:space-y-3">
+                <h3 class="text-base sm:text-lg font-semibold mb-3">
+                    Registered Teams (<span x-text="tournament.teams.length"></span>)
+                </h3>
+
+                <template x-if="tournament.teams.length === 0">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-users text-4xl mb-3 opacity-50"></i>
+                        <p>No teams registered yet. Add teams to get started.</p>
+                    </div>
+                </template>
+
+                <template x-for="(team, index) in tournament.teams" :key="team.id">
+                    <div
+                        class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors gap-3 sm:gap-0">
+                        <div class="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto">
+                            <div
+                                class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                <span x-text="team.seed || index + 1"></span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="font-medium text-gray-800 text-sm sm:text-base" x-text="team.name"></p>
+                                <p class="text-xs sm:text-sm text-gray-500">
+                                    <template x-if="tournament.type === 'singles'">
+                                        <span x-text="team.player1"></span>
+                                    </template>
+                                    <template x-if="tournament.type !== 'singles'">
+                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                    </template>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex space-x-2 w-full sm:w-auto">
+                            <button @click="editTeam(team)"
+                                class="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                                <i class="fas fa-edit"></i><span class="ml-2 sm:hidden">Edit</span>
+                            </button>
+                            <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                class="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-white rounded-lg transition-colors text-sm">
+                                <i class="fas fa-trash"></i><span class="ml-2 sm:hidden">Delete</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Match Scores Tab -->
+        <div x-show="currentTab === 'matches'" class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+                <i class="fas fa-clipboard-list mr-2"></i>Match Score Management
+            </h2>
+
+            <template x-if="!tournament.isSetup">
+                <div class="text-center py-12 text-gray-500">
+                    <i class="fas fa-info-circle text-4xl mb-3 opacity-50"></i>
+                    <p>Start the tournament first to manage match scores.</p>
+                </div>
+            </template>
+
+            <template x-if="tournament.isSetup">
+                <div class="space-y-4 sm:space-y-6">
+                    <!-- Round Selector -->
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                        <label class="font-medium text-gray-700 text-sm sm:text-base">Select Round:</label>
+                        <select x-model.number="selectedRound"
+                            class="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                            <template x-for="round in getRounds()" :key="round">
+                                <option :value="round"
+                                    x-text="`${getRoundName(round)} (${getMatchesByRound(round).length} matches)`">
+                                </option>
+                            </template>
+                        </select>
+                        <span class="text-xs sm:text-sm text-gray-500"
+                            x-show="getMatchesByRound(selectedRound).length > 0">
+                            Showing <span x-text="getMatchesByRound(selectedRound).filter(m => m.winner).length"></span>
+                            of <span x-text="getMatchesByRound(selectedRound).length"></span> completed
+                        </span>
+                    </div>
+
+                    <!-- Info Message for Group Stage -->
+                    <div x-show="selectedRound === 1 && tournament.bracketFormat === 'round-robin'"
+                        class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                        <div class="flex items-start">
+                            <i class="fas fa-info-circle text-blue-600 mt-1 mr-3"></i>
+                            <div class="text-sm text-blue-800">
+                                <p class="font-semibold mb-1">Group Stage (Round Robin)</p>
+                                <p>All teams play against each other. Complete these matches to determine standings and
+                                    qualification for knockout rounds.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Matches List -->
+                    <div class="space-y-3 sm:space-y-4">
+                        <!-- Debug info -->
+                        <div x-show="true" class="text-xs text-gray-400 mb-2">
+                            Debug: selectedRound = <span x-text="selectedRound"></span> (type: <span
+                                x-text="typeof selectedRound"></span>),
+                            matches for this round: <span x-text="getMatchesByRound(selectedRound).length"></span>
+                        </div>
+
+                        <template x-if="getMatchesByRound(selectedRound).length === 0">
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-calendar-times text-3xl mb-2 opacity-50"></i>
+                                <p>No matches scheduled for this round yet.</p>
+                                <p class="text-sm mt-1"
+                                    x-show="selectedRound > 1 && tournament.bracketFormat === 'round-robin'">
+                                    Complete the group stage to generate knockout matches.
+                                </p>
+                            </div>
+                        </template>
+
+                        <template x-for="match in getMatchesByRound(selectedRound)" :key="match.id">
+                            <div class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow"
+                                :class="match.winner ? 'bg-green-50 border-green-200' : ''">
+                                <div
+                                    class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4 gap-2">
+                                    <h3 class="font-semibold text-gray-800 text-sm sm:text-base">
+                                        Match #<span x-text="match.matchNumber"></span>
+                                        <span x-show="match.winner" class="ml-2 text-green-600 text-xs sm:text-sm">
+                                            <i class="fas fa-check-circle"></i> Complete
+                                        </span>
+                                    </h3>
+                                    <span class="text-xs sm:text-sm text-gray-500"
+                                        x-text="getRoundName(match.round)"></span>
+                                </div>
+
+                                <!-- Team 1 -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-2">
+                                    <div class="flex items-center space-x-2 sm:space-x-3"
+                                        :class="match.winner === match.team1Id ? 'font-bold text-green-700' : ''">
+                                        <i class="fas fa-user-circle text-xl sm:text-2xl text-blue-600"></i>
+                                        <span class="text-sm sm:text-base truncate"
+                                            x-text="getTeamName(match.team1Id)"></span>
+                                    </div>
+                                    <div class="flex space-x-1 sm:space-x-2">
+                                        <input type="number" x-model.number="match.team1Set1" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S1">
+                                        <input type="number" x-model.number="match.team1Set2" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S2">
+                                        <input type="number" x-model.number="match.team1Set3" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S3">
+                                    </div>
+                                </div>
+
+                                <!-- VS Divider -->
+                                <div class="text-center text-gray-400 font-semibold my-2 text-xs sm:text-sm">VS</div>
+
+                                <!-- Team 2 -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                                    <div class="flex items-center space-x-2 sm:space-x-3"
+                                        :class="match.winner === match.team2Id ? 'font-bold text-green-700' : ''">
+                                        <i class="fas fa-user-circle text-xl sm:text-2xl text-purple-600"></i>
+                                        <span class="text-sm sm:text-base truncate"
+                                            x-text="getTeamName(match.team2Id)"></span>
+                                    </div>
+                                    <div class="flex space-x-1 sm:space-x-2">
+                                        <input type="number" x-model.number="match.team2Set1" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S1">
+                                        <input type="number" x-model.number="match.team2Set2" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S2">
+                                        <input type="number" x-model.number="match.team2Set3" min="0" max="30"
+                                            @input="checkWinner(match)"
+                                            class="flex-1 sm:w-16 px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                            placeholder="S3">
+                                    </div>
+                                </div>
+
+                                <button @click="saveMatch(match)"
+                                    class="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base font-medium">
+                                    <i class="fas fa-save mr-2"></i>Save Score
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Bracket & Standings Tab -->
+        <div x-show="currentTab === 'bracket'" class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+            <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+                <i class="fas fa-sitemap mr-2"></i>Tournament Bracket & Standings
+            </h2>
+
+            <template x-if="!tournament.isSetup">
+                <div class="text-center py-12 text-gray-500">
+                    <i class="fas fa-info-circle text-4xl mb-3 opacity-50"></i>
+                    <p>Start the tournament first to view the bracket.</p>
+                </div>
+            </template>
+
+            <template x-if="tournament.isSetup">
+                <div>
+                    <!-- Round Robin Info Banner -->
+                    <template x-if="tournament.bracketFormat === 'round-robin'">
+                        <div class="mb-4 sm:mb-6 p-3 sm:p-4 border-l-4"
+                            :class="isRoundRobinComplete() ? 'bg-green-50 border-green-400' : 'bg-blue-50 border-blue-400'">
+                            <p class="text-xs sm:text-sm font-medium"
+                                :class="isRoundRobinComplete() ? 'text-green-800' : 'text-blue-800'">
+                                <i class="fas fa-info-circle mr-2"></i>
+                                <template x-if="!isRoundRobinComplete()">
+                                    <span>
+                                        <strong>Group Stage in Progress:</strong> Each team plays every other team.
+                                        Complete all matches to generate the knockout bracket.
+                                        <span x-show="tournament.knockoutTeamsCount >= 4">
+                                            Top <span x-text="tournament.knockoutTeamsCount"></span> teams will advance
+                                            to the knockout rounds.
+                                        </span>
+                                    </span>
+                                </template>
+                                <template x-if="isRoundRobinComplete()">
+                                    <span>
+                                        ✓ Group Stage Complete! Top <span x-text="tournament.knockoutTeamsCount"></span>
+                                        teams have advanced to the knockout rounds.
+                                        <template x-if="tournament.knockoutTeamsCount >= 8">
+                                            <span>Quarter-Finals → Semi-Finals → Finals</span>
+                                        </template>
+                                        <template x-if="tournament.knockoutTeamsCount === 4">
+                                            <span>Semi-Finals → Finals</span>
+                                        </template>
+                                        <template x-if="tournament.knockoutTeamsCount === 2">
+                                            <span>Finals</span>
+                                        </template>
+                                    </span>
+                                </template>
+                            </p>
+                        </div>
+                    </template>
+
+                    <!-- Bracket View -->
+                    <div class="mb-6 sm:mb-8">
+                        <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-center">Tournament Bracket</h3>
+
+                        <!-- Canvas Bracket -->
+                        <div class="relative overflow-hidden py-8 bg-gray-50 rounded-lg" style="height: 800px;">
+                            <canvas id="bracketCanvas" style="cursor: grab;"></canvas>
+                        </div>
+
+                        <!-- Old HTML Bracket (Hidden) -->
+                        <div class="hidden">
+                            <!-- Bracket Grid Container -->
+                            <div class="flex items-center justify-center gap-8 px-4" x-data="{
+                                    knockoutRounds: getRounds().filter(r => tournament.bracketFormat !== 'round-robin' || r > 1),
+                                    finalsRound: tournament.totalRounds,
+                                    hasQuarters: false,
+                                    hasSemis: false,
+                                    init() {
+                                        this.hasQuarters = this.knockoutRounds.length >= 3;
+                                        this.hasSemis = this.knockoutRounds.length >= 2;
+                                    }
+                                }">
+
+                                <!-- LEFT SIDE BRACKET -->
+                                <div class="flex gap-8">
+
+                                    <!-- Quarter-Finals LEFT (if exists) -->
+                                    <template x-if="hasQuarters && getMatchesByRound(finalsRound - 2).length > 0">
+                                        <div class="flex flex-col justify-around" style="min-height: 600px;">
+                                            <div class="text-center mb-4">
+                                                <h5 class="text-sm font-semibold text-gray-600"
+                                                    x-text="getRoundName(finalsRound - 2)"></h5>
+                                            </div>
+                                            <div class="space-y-16">
+                                                <template
+                                                    x-for="match in getMatchesByRound(finalsRound - 2).slice(0, Math.ceil(getMatchesByRound(finalsRound - 2).length / 2))"
+                                                    :key="match.id">
+                                                    <div class="relative">
+                                                        <div class="border-2 rounded-lg p-3 w-56 bg-white shadow-sm hover:shadow-md transition-shadow"
+                                                            :class="match.winner ? 'border-blue-400 bg-blue-50' : 'border-gray-300'">
+                                                            <div class="text-xs text-gray-500 mb-2">Match #<span
+                                                                    x-text="match.matchNumber"></span></div>
+
+                                                            <div class="space-y-1">
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team1Id ? 'bg-blue-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team1Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team1Set1 || '-'"></span>/<span
+                                                                            x-text="match.team1Set2 || '-'"></span>/<span
+                                                                            x-text="match.team1Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team2Id ? 'bg-blue-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team2Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team2Set1 || '-'"></span>/<span
+                                                                            x-text="match.team2Set2 || '-'"></span>/<span
+                                                                            x-text="match.team2Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div x-show="match.winner"
+                                                            class="absolute top-1/2 -right-8 w-8 h-0.5 bg-blue-400">
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- Semi-Finals LEFT -->
+                                    <template x-if="hasSemis && getMatchesByRound(finalsRound - 1).length > 0">
+                                        <div class="flex flex-col justify-around" style="min-height: 500px;">
+                                            <div class="text-center mb-4">
+                                                <h5 class="text-sm font-semibold text-gray-600"
+                                                    x-text="getRoundName(finalsRound - 1)"></h5>
+                                            </div>
+                                            <div :class="hasQuarters ? 'space-y-32' : 'space-y-16'">
+                                                <template
+                                                    x-for="match in getMatchesByRound(finalsRound - 1).slice(0, Math.ceil(getMatchesByRound(finalsRound - 1).length / 2))"
+                                                    :key="match.id">
+                                                    <div class="relative">
+                                                        <div class="border-2 rounded-lg p-3 w-56 bg-white shadow-sm hover:shadow-md transition-shadow"
+                                                            :class="match.winner ? 'border-green-400 bg-green-50' : 'border-gray-300'">
+                                                            <div class="text-xs text-gray-500 mb-2">Match #<span
+                                                                    x-text="match.matchNumber"></span></div>
+
+                                                            <div class="space-y-1">
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team1Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team1Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team1Set1 || '-'"></span>/<span
+                                                                            x-text="match.team1Set2 || '-'"></span>/<span
+                                                                            x-text="match.team1Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team2Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team2Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team2Set1 || '-'"></span>/<span
+                                                                            x-text="match.team2Set2 || '-'"></span>/<span
+                                                                            x-text="match.team2Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div x-show="match.winner"
+                                                            class="absolute top-1/2 -right-8 w-8 h-0.5 bg-green-400">
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- CENTER - FINALS & TROPHY -->
+                                <div class="flex flex-col items-center justify-center px-8">
+                                    <!-- Trophy -->
+                                    <div class="mb-6">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-20 h-20 text-yellow-500">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 0 0 2.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 0 1 2.916.52 6.003 6.003 0 0 1-5.395 4.972m0 0a6.726 6.726 0 0 1-2.749 1.35m0 0a6.772 6.772 0 0 1-3.044 0" />
+                                        </svg>
+
+                                    </div>
+
+                                    <!-- Finals Title -->
+                                    <div class="text-center mb-4">
+                                        <h5 class="text-base font-bold text-gray-700 flex items-center gap-2">
+                                            <i class="fas fa-crown text-yellow-500"></i>
+                                            <span x-text="getRoundName(finalsRound)"></span>
+                                        </h5>
+                                    </div>
+
+                                    <!-- Finals Match -->
+                                    <template x-if="getMatchesByRound(finalsRound).length > 0">
+                                        <template x-for="match in getMatchesByRound(finalsRound)" :key="match.id">
+                                            <div
+                                                class="border-4 rounded-xl p-4 w-80 bg-gradient-to-br from-yellow-50 via-white to-yellow-50 shadow-2xl border-yellow-400">
+                                                <div
+                                                    class="text-xs text-yellow-700 mb-3 font-bold text-center tracking-wide">
+                                                    <i class="fas fa-trophy mr-1"></i> CHAMPIONSHIP MATCH
+                                                </div>
+
+                                                <div class="space-y-2">
+                                                    <div class="flex justify-between items-center p-3 rounded-lg text-sm transition-all"
+                                                        :class="match.winner === match.team1Id ? 'bg-gradient-to-r from-yellow-300 to-yellow-400 font-bold shadow-lg scale-105' : 'bg-white border-2 border-gray-200'">
+                                                        <span class="truncate flex-1 font-semibold"
+                                                            x-text="getTeamName(match.team1Id)"></span>
+                                                        <span class="ml-3 font-mono text-xs font-bold">
+                                                            <span x-text="match.team1Set1 || '-'"></span> /
+                                                            <span x-text="match.team1Set2 || '-'"></span> /
+                                                            <span x-text="match.team1Set3 || '-'"></span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="text-center text-xs text-gray-400 font-bold">VS
+                                                    </div>
+
+                                                    <div class="flex justify-between items-center p-3 rounded-lg text-sm transition-all"
+                                                        :class="match.winner === match.team2Id ? 'bg-gradient-to-r from-yellow-300 to-yellow-400 font-bold shadow-lg scale-105' : 'bg-white border-2 border-gray-200'">
+                                                        <span class="truncate flex-1 font-semibold"
+                                                            x-text="getTeamName(match.team2Id)"></span>
+                                                        <span class="ml-3 font-mono text-xs font-bold">
+                                                            <span x-text="match.team2Set1 || '-'"></span> /
+                                                            <span x-text="match.team2Set2 || '-'"></span> /
+                                                            <span x-text="match.team2Set3 || '-'"></span>
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div x-show="match.winner"
+                                                    class="mt-4 pt-3 border-t-2 border-yellow-300">
+                                                    <div class="text-center">
+                                                        <div class="text-xs text-yellow-600 font-semibold mb-1">
+                                                            🏆 CHAMPION 🏆</div>
+                                                        <div class="text-lg font-bold text-yellow-700"
+                                                            x-text="getTeamName(match.winner)"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </template>
+                                </div>
+
+                                <!-- RIGHT SIDE BRACKET -->
+                                <div class="flex gap-8">
+
+                                    <!-- Semi-Finals RIGHT -->
+                                    <template x-if="hasSemis && getMatchesByRound(finalsRound - 1).length > 0">
+                                        <div class="flex flex-col justify-around" style="min-height: 500px;">
+                                            <div class="text-center mb-4">
+                                                <h5 class="text-sm font-semibold text-gray-600"
+                                                    x-text="getRoundName(finalsRound - 1)"></h5>
+                                            </div>
+                                            <div :class="hasQuarters ? 'space-y-32' : 'space-y-16'">
+                                                <template
+                                                    x-for="match in getMatchesByRound(finalsRound - 1).slice(Math.ceil(getMatchesByRound(finalsRound - 1).length / 2))"
+                                                    :key="match.id">
+                                                    <div class="relative">
+                                                        <div x-show="match.winner"
+                                                            class="absolute top-1/2 -left-8 w-8 h-0.5 bg-green-400">
+                                                        </div>
+
+                                                        <div class="border-2 rounded-lg p-3 w-56 bg-white shadow-sm hover:shadow-md transition-shadow"
+                                                            :class="match.winner ? 'border-green-400 bg-green-50' : 'border-gray-300'">
+                                                            <div class="text-xs text-gray-500 mb-2">Match #<span
+                                                                    x-text="match.matchNumber"></span></div>
+
+                                                            <div class="space-y-1">
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team1Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team1Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team1Set1 || '-'"></span>/<span
+                                                                            x-text="match.team1Set2 || '-'"></span>/<span
+                                                                            x-text="match.team1Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team2Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team2Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team2Set1 || '-'"></span>/<span
+                                                                            x-text="match.team2Set2 || '-'"></span>/<span
+                                                                            x-text="match.team2Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- Quarter-Finals RIGHT (if exists) -->
+                                    <template x-if="hasQuarters && getMatchesByRound(finalsRound - 2).length > 0">
+                                        <div class="flex flex-col justify-around" style="min-height: 600px;">
+                                            <div class="text-center mb-4">
+                                                <h5 class="text-sm font-semibold text-gray-600"
+                                                    x-text="getRoundName(finalsRound - 2)"></h5>
+                                            </div>
+                                            <div class="space-y-16">
+                                                <template
+                                                    x-for="match in getMatchesByRound(finalsRound - 2).slice(Math.ceil(getMatchesByRound(finalsRound - 2).length / 2))"
+                                                    :key="match.id">
+                                                    <div class="relative">
+                                                        <div x-show="match.winner"
+                                                            class="absolute top-1/2 -left-8 w-8 h-0.5 bg-blue-400">
+                                                        </div>
+
+                                                        <div class="border-2 rounded-lg p-3 w-56 bg-white shadow-sm hover:shadow-md transition-shadow"
+                                                            :class="match.winner ? 'border-blue-400 bg-blue-50' : 'border-gray-300'">
+                                                            <div class="text-xs text-gray-500 mb-2">Match #<span
+                                                                    x-text="match.matchNumber"></span></div>
+
+                                                            <div class="space-y-1">
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team1Id ? 'bg-blue-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team1Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team1Set1 || '-'"></span>/<span
+                                                                            x-text="match.team1Set2 || '-'"></span>/<span
+                                                                            x-text="match.team1Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+
+                                                                <div class="flex justify-between items-center p-2 rounded text-xs"
+                                                                    :class="match.winner === match.team2Id ? 'bg-blue-200 font-bold' : 'bg-gray-50'">
+                                                                    <span class="truncate flex-1"
+                                                                        x-text="getTeamName(match.team2Id)"></span>
+                                                                    <span class="ml-2 font-mono">
+                                                                        <span
+                                                                            x-text="match.team2Set1 || '-'"></span>/<span
+                                                                            x-text="match.team2Set2 || '-'"></span>/<span
+                                                                            x-text="match.team2Set3 || '-'"></span>
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                    <!-- End of hidden old bracket -->
+                </div>
+
+                <!-- Group Stage Collapsible Section -->
+                <template x-if="tournament.bracketFormat === 'round-robin' && getRounds().includes(1)">
+                    <div class="mt-8 border-t pt-6">
+                        <details class="group">
+                            <summary class="cursor-pointer list-none">
+                                <div
+                                    class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <i
+                                            class="fas fa-chevron-right group-open:rotate-90 transition-transform text-gray-500"></i>
+                                        <h4 class="font-semibold text-gray-700">
+                                            <span x-text="getRoundName(1)"></span>
+                                            <span class="ml-2 text-sm text-gray-500">
+                                                (<span x-text="getMatchesByRound(1).length"></span> matches)
+                                            </span>
+                                        </h4>
+                                    </div>
+                                    <span class="text-sm text-gray-500">Click to view all group stage
+                                        matches</span>
+                                </div>
+                            </summary>
+                            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                <template x-for="match in getMatchesByRound(1)" :key="match.id">
+                                    <div class="border-2 rounded-lg p-3"
+                                        :class="match.winner ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-white'">
+                                        <div class="text-xs text-gray-500 mb-2">Match #<span
+                                                x-text="match.matchNumber"></span></div>
+
+                                        <div class="flex justify-between items-center mb-1 p-2 rounded"
+                                            :class="match.winner === match.team1Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                            <span class="text-xs truncate" x-text="getTeamName(match.team1Id)"></span>
+                                            <span class="text-xs ml-1">
+                                                <span x-text="match.team1Set1 || '-'"></span>/<span
+                                                    x-text="match.team1Set2 || '-'"></span>/<span
+                                                    x-text="match.team1Set3 || '-'"></span>
+                                            </span>
+                                        </div>
+
+                                        <div class="flex justify-between items-center p-2 rounded"
+                                            :class="match.winner === match.team2Id ? 'bg-green-200 font-bold' : 'bg-gray-50'">
+                                            <span class="text-xs truncate" x-text="getTeamName(match.team2Id)"></span>
+                                            <span class="text-xs ml-1">
+                                                <span x-text="match.team2Set1 || '-'"></span>/<span
+                                                    x-text="match.team2Set2 || '-'"></span>/<span
+                                                    x-text="match.team2Set3 || '-'"></span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </details>
+                    </div>
+                </template>
+
+        </div>
+        </template>
+
+        <!-- Standings Table (Always Visible) -->
+        <template x-if="tournament.isSetup">
+            <div class="mt-6 sm:mt-8">
+                <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Current Standings</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse bg-white shadow-sm rounded-lg">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="border border-gray-300 px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Rank
+                                </th>
+                                <th class="border border-gray-300 px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Team
+                                </th>
+                                <template x-if="tournament.bracketFormat === 'round-robin'">
+                                    <th class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-xs sm:text-sm">
+                                        Points</th>
+                                </template>
+                                <th class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-xs sm:text-sm">Wins
+                                </th>
+                                <th class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-xs sm:text-sm">
+                                    Losses</th>
+                                <th class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-xs sm:text-sm">
+                                    Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(standing, index) in getStandings()" :key="standing.teamId">
+                                <tr :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
+                                    <td class="border border-gray-300 px-2 sm:px-4 py-2 font-bold text-xs sm:text-sm"
+                                        x-text="index + 1"></td>
+                                    <td class="border border-gray-300 px-2 sm:px-4 py-2 text-xs sm:text-sm truncate max-w-[150px] sm:max-w-none"
+                                        x-text="standing.teamName"></td>
+                                    <template x-if="tournament.bracketFormat === 'round-robin'">
+                                        <td class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-blue-600 font-bold text-xs sm:text-sm"
+                                            x-text="standing.points"></td>
+                                    </template>
+                                    <td class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-green-600 font-semibold text-xs sm:text-sm"
+                                        x-text="standing.wins"></td>
+                                    <td class="border border-gray-300 px-2 sm:px-4 py-2 text-center text-red-600 font-semibold text-xs sm:text-sm"
+                                        x-text="standing.losses"></td>
+                                    <td class="border border-gray-300 px-2 sm:px-4 py-2 text-center">
+                                        <span :class="standing.status === 'Champion' ? 'bg-yellow-400 text-yellow-900' : 
+                                                      standing.status === 'Finalist' ? 'bg-purple-100 text-purple-800' :
+                                                      standing.status === 'Semi-Finalist' ? 'bg-blue-100 text-blue-800' :
+                                                      standing.status === 'Quarter-Finalist' ? 'bg-indigo-100 text-indigo-800' :
+                                                      standing.status === 'Active' ? 'bg-green-100 text-green-800' : 
+                                                      'bg-red-100 text-red-800'"
+                                            class="px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold"
+                                            x-text="standing.status"></span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </template>
+
+        <!-- Champion Display -->
+        <template x-if="getChampion()">
+            <div
+                class="mt-6 sm:mt-8 p-4 sm:p-6 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-lg shadow-lg text-center winner-glow">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-12 h-12 sm:w-16 sm:h-16 text-white mb-3 sm:mb-4 animate-pulse justify-center mx-auto">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 0 0 2.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 0 1 2.916.52 6.003 6.003 0 0 1-5.395 4.972m0 0a6.726 6.726 0 0 1-2.749 1.35m0 0a6.772 6.772 0 0 1-3.044 0" />
+                </svg>
+                <h3 class="text-xl sm:text-3xl font-bold text-white mb-2">Tournament Champion!</h3>
+                <p class="text-lg sm:text-2xl font-semibold text-yellow-100" x-text="getChampion()"></p>
+            </div>
+        </template>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-gray-500 text-sm mb-4">
+        <p><i class="fas fa-code mr-2"></i>Developed at CGHQ</p>
+    </div>
+
+    <!-- Mobile Bottom Navigation (Visible only on Mobile) -->
+    <div class="mobile-nav md:hidden">
+        <div class="grid grid-cols-4 h-full">
+            <button @click="switchTab('setup')" :class="currentTab === 'setup' ? 'active' : 'text-gray-600'"
+                class="mobile-nav-item">
+                <i class="fas fa-cog"></i>
+                <span class="text-xs">Setup</span>
+            </button>
+            <button @click="switchTab('teams')" :class="currentTab === 'teams' ? 'active' : 'text-gray-600'"
+                class="mobile-nav-item">
+                <i class="fas fa-users"></i>
+                <span class="text-xs">Teams</span>
+            </button>
+            <button @click="switchTab('matches')" :class="currentTab === 'matches' ? 'active' : 'text-gray-600'"
+                class="mobile-nav-item" :disabled="!tournament.isSetup">
+                <i class="fas fa-clipboard-list"></i>
+                <span class="text-xs">Matches</span>
+            </button>
+            <button @click="switchTab('bracket')" :class="currentTab === 'bracket' ? 'active' : 'text-gray-600'"
+                class="mobile-nav-item" :disabled="!tournament.isSetup">
+                <i class="fas fa-sitemap"></i>
+                <span class="text-xs">Bracket</span>
+            </button>
+        </div>
+    </div>
+    </div>
+
+    <script src="js/models.js"></script>
+    <script src="js/bracket-renderer.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

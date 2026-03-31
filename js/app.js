@@ -68,8 +68,16 @@ function tournamentApp() {
 
             // Initialize bracket renderer
             this.$nextTick(() => {
-                this.bracketRenderer = new BracketRenderer('bracketCanvas', this);
-                this.bracketRenderer.render();
+                try {
+                    if (typeof BracketRenderer === 'undefined') {
+                        console.error('BracketRenderer class not found! Make sure bracket-renderer.js is loaded.');
+                        return;
+                    }
+                    this.bracketRenderer = new BracketRenderer('bracketCanvas', this);
+                    this.bracketRenderer.render();
+                } catch (error) {
+                    console.error('Error initializing bracket renderer:', error);
+                }
             });
 
             // Auto-save on changes

@@ -223,6 +223,127 @@ function tournamentApp() {
         },
 
         /**
+         * Export teams to CSV
+         */
+        exportTeamsToCSV() {
+            if (this.tournament.teams.length === 0) {
+                alert('No teams to export');
+                return;
+            }
+
+            // Create CSV header
+            let csv = 'Player 1,Player 2,Seed,Type,Group\n';
+
+            // Add team data
+            this.tournament.teams.forEach(team => {
+                const player1 = team.player1 || '';
+                const player2 = team.player2 || '';
+                const seed = team.seed || '';
+                const type = team.type || 'singles';
+                const group = team.group || '';
+
+                // Escape commas in player names
+                const escapedPlayer1 = player1.includes(',') ? `"${player1}"` : player1;
+                const escapedPlayer2 = player2.includes(',') ? `"${player2}"` : player2;
+
+                csv += `${escapedPlayer1},${escapedPlayer2},${seed},${type},${group}\n`;
+            });
+
+            // Create download link
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `teams_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            this.showNotification('Teams exported successfully!', 'success');
+        },
+
+        /**
+         * Import teams from CSV
+         */
+        importTeamsFromCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (this.tournament.isSetup) {
+                alert('Cannot import teams after tournament has started. Please reset the tournament first.');
+                event.target.value = ''; // Reset file input
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const csv = e.target.result;
+                    const lines = csv.split('\n');
+                    let imported = 0;
+
+                    // Skip header row and process data
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+
+                        // Parse CSV line (handle quoted fields)
+                        const fields = [];
+                        let current = '';
+                        let inQuotes = false;
+
+                        for (let j = 0; j < line.length; j++) {
+                            const char = line[j];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                fields.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        fields.push(current.trim());
+
+                        const [player1, player2, seed, type, group] = fields;
+
+                        if (!player1) continue;
+
+                        // Validate tournament type matches
+                        const teamType = type || 'singles';
+                        if (teamType !== this.tournament.type) {
+                            console.warn(`Skipping team with type ${teamType}, tournament is ${this.tournament.type}`);
+                            continue;
+                        }
+
+                        // Create team
+                        const team = new Team(
+                            `team-${Date.now()}-${Math.random()}`,
+                            player1,
+                            player2 || null,
+                            seed ? parseInt(seed) : null,
+                            teamType,
+                            group || null
+                        );
+
+                        this.tournament.teams.push(team);
+                        imported++;
+                    }
+
+                    this.saveTournament();
+                    this.updateCounter++;
+                    this.showNotification(`${imported} team(s) imported successfully!`, 'success');
+                } catch (error) {
+                    alert('Error importing CSV: ' + error.message);
+                }
+                event.target.value = ''; // Reset file input
+            };
+
+            reader.readAsText(file);
+        },
+
+        /**
          * Setup/Start the tournament
          */
         setupTournament() {

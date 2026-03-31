@@ -128,6 +128,12 @@ class BracketRenderer {
             return;
         }
 
+        // Check if this is a group-stage tournament
+        if (this.app.tournament.bracketFormat === 'group-stage') {
+            this.renderGroupStage();
+            return;
+        }
+
         this.setCanvasSize();
         this.clear();
 
@@ -551,6 +557,274 @@ class BracketRenderer {
         const width = this.canvas.width / (window.devicePixelRatio || 1);
         const height = this.canvas.height / (window.devicePixelRatio || 1);
         this.ctx.clearRect(0, 0, width, height);
+    }
+
+    /**
+     * Render group-stage tournament format
+     */
+    renderGroupStage() {
+        this.setCanvasSize();
+        this.clear();
+
+        const width = this.canvas.width / (window.devicePixelRatio || 1);
+        const height = this.canvas.height / (window.devicePixelRatio || 1);
+
+        // Add background
+        this.ctx.fillStyle = '#f9fafb';
+        this.ctx.fillRect(0, 0, width, height);
+
+        // Center the content on first render if not panned
+        if (!this.hasBeenPanned) {
+            this.panX = 50;
+            this.panY = 50;
+        }
+
+        // Apply pan and zoom transformations
+        this.ctx.save();
+        this.ctx.translate(this.panX, this.panY);
+        this.ctx.scale(this.zoom, this.zoom);
+
+        this.matchBoxes = [];
+
+        const groups = ['A', 'B', 'C', 'D'];
+        const groupColors = {
+            'A': { bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+            'B': { bg: '#eff6ff', border: '#2563eb', text: '#1e40af' },
+            'C': { bg: '#f0fdf4', border: '#16a34a', text: '#166534' },
+            'D': { bg: '#fefce8', border: '#ca8a04', text: '#854d0e' }
+        };
+
+        const groupWidth = 200;
+        const groupHeight = 280;
+        const horizontalGap = 150; // Gap between groups and semi-finals
+        const semiToFinalsGap = 180; // Gap between semi-finals and finals
+        const verticalSpacing = 40;
+        const leftX = 50;
+        const centerY = height / (2 * this.zoom) - this.panY / this.zoom;
+
+        // Calculate all X positions from left to right
+        const groupsLeftX = leftX;
+        const semi1X = groupsLeftX + groupWidth + horizontalGap;
+        const finalsX = semi1X + this.matchWidth + semiToFinalsGap;
+        const semi2X = finalsX + this.matchWidth + semiToFinalsGap;
+        const groupsRightX = semi2X + this.matchWidth + horizontalGap;
+
+        // Position groups: A & B on left, C & D on right
+        const groupPositions = {
+            'A': { x: groupsLeftX, y: centerY - groupHeight - verticalSpacing / 2 },
+            'B': { x: groupsLeftX, y: centerY + verticalSpacing / 2 },
+            'C': { x: groupsRightX, y: centerY - groupHeight - verticalSpacing / 2 },
+            'D': { x: groupsRightX, y: centerY + verticalSpacing / 2 }
+        };
+
+        // Draw each group
+        groups.forEach(group => {
+            const pos = groupPositions[group];
+            const standings = this.app.getGroupStandings(group);
+            const colors = groupColors[group];
+
+            // Draw group container
+            this.ctx.fillStyle = colors.bg;
+            this.ctx.strokeStyle = colors.border;
+            this.ctx.lineWidth = 3;
+            this.roundRect(pos.x, pos.y, groupWidth, groupHeight, 8);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Draw group title
+            this.ctx.fillStyle = colors.text;
+            this.ctx.font = 'bold 20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`Group ${group}`, pos.x + groupWidth / 2, pos.y + 30);
+
+            // Draw "Group Stage" label
+            this.ctx.fillStyle = '#6b7280';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText('Group Stage', pos.x + groupWidth / 2, pos.y - 10);
+
+            // Draw standings - limit to prevent spillage
+            this.ctx.fillStyle = '#374151';
+            this.ctx.font = '13px Arial';
+            this.ctx.textAlign = 'left';
+
+            const maxTeamsToShow = 7; // Limit teams to prevent spillage
+            const teamsToShow = standings.slice(0, maxTeamsToShow);
+
+            teamsToShow.forEach((standing, index) => {
+                const teamName = this.app.getTeamName(standing.teamId);
+                const yPos = pos.y + 55 + index * 28;
+
+                // Check if we're within bounds
+                if (yPos + 20 > pos.y + groupHeight) return;
+
+                // Highlight winner
+                if (standing.isWinner) {
+                    this.ctx.fillStyle = colors.border;
+                    this.ctx.globalAlpha = 0.15;
+                    this.ctx.fillRect(pos.x + 10, yPos - 15, groupWidth - 20, 24);
+                    this.ctx.globalAlpha = 1;
+                    this.ctx.fillStyle = colors.text;
+                    this.ctx.font = 'bold 13px Arial';
+                } else {
+                    this.ctx.fillStyle = '#6b7280';
+                    this.ctx.font = '13px Arial';
+                }
+
+                // Truncate name to fit
+                const displayName = teamName.length > 14 ? teamName.substring(0, 14) + '...' : teamName;
+                this.ctx.fillText(`${index + 1}. ${displayName}`, pos.x + 15, yPos);
+
+                // Draw points
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText(`${standing.points}pts`, pos.x + groupWidth - 15, yPos);
+                this.ctx.textAlign = 'left';
+            });
+
+            // Show "+X more" if there are more teams
+            if (standings.length > maxTeamsToShow) {
+                const remainingCount = standings.length - maxTeamsToShow;
+                this.ctx.fillStyle = '#9ca3af';
+                this.ctx.font = 'italic 11px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`+${remainingCount} more`, pos.x + groupWidth / 2, pos.y + groupHeight - 15);
+            }
+        });
+
+        // Draw finals in the center
+        const finalsY = centerY - this.matchHeight / 2;
+        const finalsMatch = this.app.getMatchesByRound(3);
+        if (finalsMatch.length > 0 && finalsMatch[0]) {
+            this.drawMatch(finalsMatch[0], finalsX, finalsY, true);
+
+            // Draw "Final" label
+            this.ctx.fillStyle = '#1f2937';
+            this.ctx.font = 'bold 16px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Final', finalsX + this.matchWidth / 2, finalsY - 15);
+
+            // Draw trophy
+            const trophyX = finalsX + this.matchWidth / 2;
+            const trophyY = finalsY + this.matchHeight + 60;
+            this.ctx.fillStyle = '#fbbf24';
+            this.ctx.font = 'bold 48px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('🏆', trophyX, trophyY);
+
+            // Draw champion if finals complete
+            if (finalsMatch[0].winner) {
+                const championTeam = this.app.tournament.teams.find(t => t.id === finalsMatch[0].winner);
+                if (championTeam) {
+                    this.ctx.fillStyle = '#fbbf24';
+                    this.ctx.font = 'bold 24px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('🏆 CHAMPION 🏆', trophyX, trophyY + 60);
+
+                    this.ctx.fillStyle = '#1f2937';
+                    this.ctx.font = 'bold 16px Arial';
+
+                    // Display player names
+                    this.ctx.fillText(championTeam.player1, trophyX, trophyY + 90);
+
+                    if (championTeam.player2) {
+                        this.ctx.fillText(championTeam.player2, trophyX, trophyY + 110);
+                    }
+                }
+            }
+        }
+
+        // Draw semi-finals on the sides of finals
+        const semiMatches = this.app.getMatchesByRound(2);
+        if (semiMatches.length > 0) {
+            // Semi 1: Group A vs Group C (LEFT side of finals)
+            const semi1Y = finalsY;
+            if (semiMatches[0]) {
+                this.drawMatch(semiMatches[0], semi1X, semi1Y);
+
+                // Draw "Semi Final" label
+                this.ctx.fillStyle = '#6b7280';
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('Semi Final', semi1X + this.matchWidth / 2, semi1Y - 10);
+            }
+
+            // Semi 2: Group B vs Group D (RIGHT side of finals)
+            const semi2Y = finalsY;
+            if (semiMatches[1]) {
+                this.drawMatch(semiMatches[1], semi2X, semi2Y);
+
+                // Draw "Semi Final" label
+                this.ctx.fillStyle = '#6b7280';
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('Semi Final', semi2X + this.matchWidth / 2, semi2Y - 10);
+            }
+        }
+
+        // Draw connector lines after all boxes are drawn
+        if (semiMatches.length > 0) {
+            this.ctx.strokeStyle = '#94a3b8';
+            this.ctx.lineWidth = 2;
+
+            // Group A → Semi 1 (left groups to left semi-final)
+            if (semiMatches[0]) {
+                const semi1Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight / 2);
+                this.ctx.lineTo(semi1X, semi1Y + this.matchHeight / 3);
+                this.ctx.stroke();
+            }
+
+            // Group B → Semi 1 (left groups to left semi-final)
+            if (semiMatches[0]) {
+                const semi1Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + groupHeight / 2);
+                this.ctx.lineTo(semi1X, semi1Y + (this.matchHeight * 2 / 3));
+                this.ctx.stroke();
+            }
+
+            // Group C → Semi 2 (right groups to right semi-final)
+            if (semiMatches[1]) {
+                const semi2Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + groupHeight / 2);
+                this.ctx.lineTo(semi2X + this.matchWidth, semi2Y + this.matchHeight / 3);
+                this.ctx.stroke();
+            }
+
+            // Group D → Semi 2 (right groups to right semi-final)
+            if (semiMatches[1]) {
+                const semi2Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + groupHeight / 2);
+                this.ctx.lineTo(semi2X + this.matchWidth, semi2Y + (this.matchHeight * 2 / 3));
+                this.ctx.stroke();
+            }
+
+            // Semi 1 → Finals (left semi to center finals)
+            if (semiMatches[0]) {
+                const semi1Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(semi1X + this.matchWidth, semi1Y + this.matchHeight / 2);
+                this.ctx.lineTo(finalsX, finalsY + this.matchHeight / 2);
+                this.ctx.stroke();
+            }
+
+            // Semi 2 → Finals (right semi to center finals)
+            if (semiMatches[1]) {
+                const semi2Y = finalsY;
+                this.ctx.beginPath();
+                this.ctx.moveTo(semi2X, semi2Y + this.matchHeight / 2);
+                this.ctx.lineTo(finalsX + this.matchWidth, finalsY + this.matchHeight / 2);
+                this.ctx.stroke();
+            }
+        }
+
+        // Restore context
+        this.ctx.restore();
+
+        // Draw zoom indicator
+        this.drawZoomIndicator();
     }
 
     /**

@@ -14,7 +14,8 @@ function tournamentApp() {
         newTeam: {
             player1: '',
             player2: '',
-            seed: ''
+            seed: '',
+            group: ''
         },
 
         // Selected round for match viewing
@@ -128,6 +129,12 @@ function tournamentApp() {
                 return;
             }
 
+            // Check if group is required for group-stage format
+            if (this.tournament.bracketFormat === 'group-stage' && !this.newTeam.group) {
+                alert('Please select a group (A, B, C, or D)');
+                return;
+            }
+
             // Generate unique ID
             const id = 'team-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
@@ -136,7 +143,8 @@ function tournamentApp() {
                 this.newTeam.player1.trim(),
                 this.newTeam.player2.trim() || null,
                 this.newTeam.seed ? parseInt(this.newTeam.seed) : null,
-                this.tournament.type
+                this.tournament.type,
+                this.newTeam.group || null
             );
 
             this.tournament.addTeam(team);
@@ -145,7 +153,8 @@ function tournamentApp() {
             this.newTeam = {
                 player1: '',
                 player2: '',
-                seed: ''
+                seed: '',
+                group: ''
             };
 
             this.saveTournament();
@@ -175,9 +184,29 @@ function tournamentApp() {
                 updates.seed = newSeed.trim() ? parseInt(newSeed) : null;
             }
 
+            // Allow editing group if group-stage format
+            if (this.tournament.bracketFormat === 'group-stage') {
+                const currentGroup = team.group || 'Not assigned';
+                const newGroup = prompt(`Assign to group (A, B, C, or D).\nCurrent: ${currentGroup}`, team.group || '');
+                if (newGroup !== null) {
+                    const groupUpper = newGroup.trim().toUpperCase();
+                    if (groupUpper && !['A', 'B', 'C', 'D'].includes(groupUpper)) {
+                        alert('Group must be A, B, C, or D');
+                        return;
+                    }
+                    updates.group = groupUpper || null;
+                }
+            }
+
             this.tournament.updateTeam(team.id, updates);
             this.saveTournament();
             this.updateCounter++; // Trigger Alpine reactivity
+
+            // Force a re-render by updating Alpine's reactive state
+            this.$nextTick(() => {
+                this.updateCounter++;
+            });
+
             this.showNotification('Team updated successfully!', 'success');
         },
 
@@ -269,6 +298,13 @@ function tournamentApp() {
                 if (fromFinal === 3) return 'Round of 16';
 
                 return `Knockout Round ${round - 1}`;
+            }
+
+            if (this.tournament.bracketFormat === 'group-stage') {
+                if (round === 1) return 'Group Stage';
+                if (round === 2) return 'Semi-Finals';
+                if (round === 3) return 'Finals';
+                return `Round ${round}`;
             }
 
             const totalRounds = this.tournament.totalRounds;
@@ -371,6 +407,42 @@ function tournamentApp() {
             // Force Alpine.js to track updateCounter as a dependency
             const _ = this.updateCounter;
             return this.tournament.matches.find(m => m.stage === 'finals');
+        },
+
+        /**
+         * Get group standings (for group-stage format)
+         */
+        getGroupStandings(group) {
+            // Force Alpine.js to track updateCounter as a dependency
+            const _ = this.updateCounter;
+            if (this.tournament.bracketFormat === 'group-stage') {
+                return this.tournament.getGroupStandings(group);
+            }
+            return [];
+        },
+
+        /**
+         * Get all groups with standings (for group-stage format)
+         */
+        getAllGroupStandings() {
+            // Force Alpine.js to track updateCounter as a dependency
+            const _ = this.updateCounter;
+            if (this.tournament.bracketFormat === 'group-stage') {
+                return ['A', 'B', 'C', 'D'].map(group => ({
+                    group,
+                    standings: this.tournament.getGroupStandings(group)
+                }));
+            }
+            return [];
+        },
+
+        /**
+         * Get matches for a specific group
+         */
+        getGroupMatches(group) {
+            // Force Alpine.js to track updateCounter as a dependency
+            const _ = this.updateCounter;
+            return this.tournament.matches.filter(m => m.stage === `group-${group}`);
         },
 
         /**

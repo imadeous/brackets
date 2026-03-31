@@ -150,6 +150,7 @@
                 <select x-model="tournament.bracketFormat"
                     class="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base">
                     <option value="round-robin">Round Robin + Knockout (Group → QF → SF → Finals)</option>
+                    <option value="group-stage">Group Stage (4 Groups → Semi-Finals → Finals)</option>
                     <option value="single-elimination">Single Elimination</option>
                     <option value="double-elimination">Double Elimination</option>
                 </select>
@@ -183,7 +184,18 @@
                             teams: Top 2 advance
                         </span>
                     </template>
-                    <template x-if="tournament.bracketFormat !== 'round-robin'">
+                    <template x-if="tournament.bracketFormat === 'group-stage'">
+                        <span>
+                            <strong>Group Stage Format:</strong>
+                            <br>1. Assign teams to Groups A, B, C, or D in the Teams Management tab
+                            <br>2. Each team plays all other teams in their group (3 points per win)
+                            <br>3. Semi-Finals: Winner of Group A vs Winner of Group B, Winner of Group C vs Winner of
+                            Group D
+                            <br>4. Final: Winners of the two semi-finals compete for the championship
+                        </span>
+                    </template>
+                    <template
+                        x-if="tournament.bracketFormat !== 'round-robin' && tournament.bracketFormat !== 'group-stage'">
                         <span>Add at least 2 teams in the Teams Management tab, then click "Start Tournament" to
                             generate the bracket.</span>
                     </template>
@@ -202,11 +214,21 @@
                 <h3 class="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Add New Team</h3>
 
                 <template x-if="tournament.type === 'singles'">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                         <input type="text" x-model="newTeam.player1" placeholder="Player Name"
                             class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                         <input type="text" x-model="newTeam.seed" placeholder="Seed (optional)"
                             class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <template x-if="tournament.bracketFormat === 'group-stage'">
+                            <select x-model="newTeam.group"
+                                class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                                <option value="">Select Group</option>
+                                <option value="A">Group A</option>
+                                <option value="B">Group B</option>
+                                <option value="C">Group C</option>
+                                <option value="D">Group D</option>
+                            </select>
+                        </template>
                         <button @click="addTeam()"
                             class="px-4 sm:px-6 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base">
                             <i class="fas fa-plus mr-1 sm:mr-2"></i>Add Team
@@ -215,7 +237,7 @@
                 </template>
 
                 <template x-if="tournament.type === 'doubles' || tournament.type === 'mixed-doubles'">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                         <input type="text" x-model="newTeam.player1"
                             :placeholder="tournament.type === 'mixed-doubles' ? 'Male Player' : 'Player 1'"
                             class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
@@ -224,6 +246,16 @@
                             class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
                         <input type="text" x-model="newTeam.seed" placeholder="Seed (optional)"
                             class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                        <template x-if="tournament.bracketFormat === 'group-stage'">
+                            <select x-model="newTeam.group"
+                                class="px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+                                <option value="">Select Group</option>
+                                <option value="A">Group A</option>
+                                <option value="B">Group B</option>
+                                <option value="C">Group C</option>
+                                <option value="D">Group D</option>
+                            </select>
+                        </template>
                         <button @click="addTeam()"
                             class="px-4 sm:px-6 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base">
                             <i class="fas fa-plus mr-1 sm:mr-2"></i>Add Team
@@ -245,37 +277,268 @@
                     </div>
                 </template>
 
-                <template x-for="(team, index) in tournament.teams" :key="team.id">
-                    <div
-                        class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors gap-3 sm:gap-0">
-                        <div class="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto">
+                <!-- Group-wise display for group-stage format -->
+                <template x-if="tournament.bracketFormat === 'group-stage' && tournament.teams.length > 0">
+                    <div>
+                        <!-- Unassigned Teams Warning -->
+                        <template x-if="tournament.teams.filter(t => !t.group).length > 0">
+                            <div class="mb-4 p-4 bg-orange-50 border-2 border-orange-300 rounded-lg">
+                                <h4 class="font-bold text-orange-800 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <span>Unassigned Teams (<span
+                                            x-text="tournament.teams.filter(t => !t.group).length"></span>)</span>
+                                </h4>
+                                <p class="text-sm text-orange-700 mb-3">These teams need to be assigned to a group.
+                                    Click Edit to assign them.</p>
+                                <div class="space-y-2">
+                                    <template x-for="team in tournament.teams.filter(t => !t.group)" :key="team.id">
+                                        <div
+                                            class="flex items-center justify-between p-2 bg-white rounded border border-orange-200">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-800 text-sm" x-text="team.name"></p>
+                                                <p class="text-xs text-gray-500">
+                                                    <template x-if="tournament.type === 'singles'">
+                                                        <span x-text="team.player1"></span>
+                                                    </template>
+                                                    <template x-if="tournament.type !== 'singles'">
+                                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                                    </template>
+                                                </p>
+                                            </div>
+                                            <div class="flex space-x-1">
+                                                <button @click="editTeam(team)"
+                                                    class="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-medium">
+                                                    <i class="fas fa-edit mr-1"></i>Assign Group
+                                                </button>
+                                                <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                                    :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                                    class="px-2 py-1 text-white rounded text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Group A -->
+                            <div class="border-2 border-red-300 rounded-lg p-4 bg-red-50">
+                                <h4 class="font-bold text-red-800 mb-3 flex items-center gap-2">
+                                    <span
+                                        class="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center text-sm">A</span>
+                                    <span>Group A (<span
+                                            x-text="tournament.teams.filter(t => t.group === 'A').length"></span>
+                                        teams)</span>
+                                </h4>
+                                <div class="space-y-2">
+                                    <template x-if="tournament.teams.filter(t => t.group === 'A').length === 0">
+                                        <p class="text-sm text-red-600 italic">No teams in this group</p>
+                                    </template>
+                                    <template x-for="team in tournament.teams.filter(t => t.group === 'A')"
+                                        :key="team.id">
+                                        <div
+                                            class="flex items-center justify-between p-2 bg-white rounded border border-red-200">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-800 text-sm" x-text="team.name"></p>
+                                                <p class="text-xs text-gray-500">
+                                                    <template x-if="tournament.type === 'singles'">
+                                                        <span x-text="team.player1"></span>
+                                                    </template>
+                                                    <template x-if="tournament.type !== 'singles'">
+                                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                                    </template>
+                                                </p>
+                                            </div>
+                                            <div class="flex space-x-1">
+                                                <button @click="editTeam(team)"
+                                                    class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                                    :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                                    class="px-2 py-1 text-white rounded text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Group B -->
+                            <div class="border-2 border-blue-300 rounded-lg p-4 bg-blue-50">
+                                <h4 class="font-bold text-blue-800 mb-3 flex items-center gap-2">
+                                    <span
+                                        class="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm">B</span>
+                                    <span>Group B (<span
+                                            x-text="tournament.teams.filter(t => t.group === 'B').length"></span>
+                                        teams)</span>
+                                </h4>
+                                <div class="space-y-2">
+                                    <template x-if="tournament.teams.filter(t => t.group === 'B').length === 0">
+                                        <p class="text-sm text-blue-600 italic">No teams in this group</p>
+                                    </template>
+                                    <template x-for="team in tournament.teams.filter(t => t.group === 'B')"
+                                        :key="team.id">
+                                        <div
+                                            class="flex items-center justify-between p-2 bg-white rounded border border-blue-200">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-800 text-sm" x-text="team.name"></p>
+                                                <p class="text-xs text-gray-500">
+                                                    <template x-if="tournament.type === 'singles'">
+                                                        <span x-text="team.player1"></span>
+                                                    </template>
+                                                    <template x-if="tournament.type !== 'singles'">
+                                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                                    </template>
+                                                </p>
+                                            </div>
+                                            <div class="flex space-x-1">
+                                                <button @click="editTeam(team)"
+                                                    class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                                    :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                                    class="px-2 py-1 text-white rounded text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Group C -->
+                            <div class="border-2 border-green-300 rounded-lg p-4 bg-green-50">
+                                <h4 class="font-bold text-green-800 mb-3 flex items-center gap-2">
+                                    <span
+                                        class="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm">C</span>
+                                    <span>Group C (<span
+                                            x-text="tournament.teams.filter(t => t.group === 'C').length"></span>
+                                        teams)</span>
+                                </h4>
+                                <div class="space-y-2">
+                                    <template x-if="tournament.teams.filter(t => t.group === 'C').length === 0">
+                                        <p class="text-sm text-green-600 italic">No teams in this group</p>
+                                    </template>
+                                    <template x-for="team in tournament.teams.filter(t => t.group === 'C')"
+                                        :key="team.id">
+                                        <div
+                                            class="flex items-center justify-between p-2 bg-white rounded border border-green-200">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-800 text-sm" x-text="team.name"></p>
+                                                <p class="text-xs text-gray-500">
+                                                    <template x-if="tournament.type === 'singles'">
+                                                        <span x-text="team.player1"></span>
+                                                    </template>
+                                                    <template x-if="tournament.type !== 'singles'">
+                                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                                    </template>
+                                                </p>
+                                            </div>
+                                            <div class="flex space-x-1">
+                                                <button @click="editTeam(team)"
+                                                    class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                                    :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                                    class="px-2 py-1 text-white rounded text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Group D -->
+                            <div class="border-2 border-yellow-300 rounded-lg p-4 bg-yellow-50">
+                                <h4 class="font-bold text-yellow-800 mb-3 flex items-center gap-2">
+                                    <span
+                                        class="w-8 h-8 bg-yellow-600 text-white rounded-full flex items-center justify-center text-sm">D</span>
+                                    <span>Group D (<span
+                                            x-text="tournament.teams.filter(t => t.group === 'D').length"></span>
+                                        teams)</span>
+                                </h4>
+                                <div class="space-y-2">
+                                    <template x-if="tournament.teams.filter(t => t.group === 'D').length === 0">
+                                        <p class="text-sm text-yellow-700 italic">No teams in this group</p>
+                                    </template>
+                                    <template x-for="team in tournament.teams.filter(t => t.group === 'D')"
+                                        :key="team.id">
+                                        <div
+                                            class="flex items-center justify-between p-2 bg-white rounded border border-yellow-200">
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-800 text-sm" x-text="team.name"></p>
+                                                <p class="text-xs text-gray-500">
+                                                    <template x-if="tournament.type === 'singles'">
+                                                        <span x-text="team.player1"></span>
+                                                    </template>
+                                                    <template x-if="tournament.type !== 'singles'">
+                                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                                    </template>
+                                                </p>
+                                            </div>
+                                            <div class="flex space-x-1">
+                                                <button @click="editTeam(team)"
+                                                    class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                                    :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                                    class="px-2 py-1 text-white rounded text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Regular list display for non-group formats -->
+                <template x-if="tournament.bracketFormat !== 'group-stage' && tournament.teams.length > 0">
+                    <div>
+                        <template x-for="(team, index) in tournament.teams" :key="team.id">
                             <div
-                                class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
-                                <span x-text="team.seed || index + 1"></span>
+                                class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors gap-3 sm:gap-0 mb-2">
+                                <div class="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto">
+                                    <div
+                                        class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                        <span x-text="team.seed || index + 1"></span>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-800 text-sm sm:text-base" x-text="team.name">
+                                        </p>
+                                        <p class="text-xs sm:text-sm text-gray-500">
+                                            <template x-if="tournament.type === 'singles'">
+                                                <span x-text="team.player1"></span>
+                                            </template>
+                                            <template x-if="tournament.type !== 'singles'">
+                                                <span x-text="team.player1 + ' & ' + team.player2"></span>
+                                            </template>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex space-x-2 w-full sm:w-auto">
+                                    <button @click="editTeam(team)"
+                                        class="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                                        <i class="fas fa-edit"></i><span class="ml-2 sm:hidden">Edit</span>
+                                    </button>
+                                    <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
+                                        :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
+                                        class="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-white rounded-lg transition-colors text-sm">
+                                        <i class="fas fa-trash"></i><span class="ml-2 sm:hidden">Delete</span>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex-1">
-                                <p class="font-medium text-gray-800 text-sm sm:text-base" x-text="team.name"></p>
-                                <p class="text-xs sm:text-sm text-gray-500">
-                                    <template x-if="tournament.type === 'singles'">
-                                        <span x-text="team.player1"></span>
-                                    </template>
-                                    <template x-if="tournament.type !== 'singles'">
-                                        <span x-text="team.player1 + ' & ' + team.player2"></span>
-                                    </template>
-                                </p>
-                            </div>
-                        </div>
-                        <div class="flex space-x-2 w-full sm:w-auto">
-                            <button @click="editTeam(team)"
-                                class="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
-                                <i class="fas fa-edit"></i><span class="ml-2 sm:hidden">Edit</span>
-                            </button>
-                            <button @click="deleteTeam(team.id)" :disabled="tournament.isSetup"
-                                :class="tournament.isSetup ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'"
-                                class="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-white rounded-lg transition-colors text-sm">
-                                <i class="fas fa-trash"></i><span class="ml-2 sm:hidden">Delete</span>
-                            </button>
-                        </div>
+                        </template>
                     </div>
                 </template>
             </div>

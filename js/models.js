@@ -2,12 +2,13 @@
  * Team Class - Represents a badminton team (single player, doubles pair, or mixed doubles)
  */
 class Team {
-    constructor(id, player1, player2 = null, seed = null, type = 'singles') {
+    constructor(id, player1, player2 = null, seed = null, type = 'singles', group = null) {
         this.id = id;
         this.player1 = player1;
         this.player2 = player2;
         this.seed = seed;
         this.type = type;
+        this.group = group; // For group-stage tournaments (A, B, C, D)
         this.wins = 0;
         this.losses = 0;
         this.points = 0; // For round-robin standings
@@ -28,6 +29,7 @@ class Team {
             player2: this.player2,
             seed: this.seed,
             type: this.type,
+            group: this.group,
             wins: this.wins,
             losses: this.losses,
             points: this.points,
@@ -36,7 +38,7 @@ class Team {
     }
 
     static fromJSON(json) {
-        const team = new Team(json.id, json.player1, json.player2, json.seed, json.type);
+        const team = new Team(json.id, json.player1, json.player2, json.seed, json.type, json.group);
         team.wins = json.wins || 0;
         team.losses = json.losses || 0;
         team.points = json.points || 0;
@@ -213,6 +215,8 @@ class Tournament {
 
         if (this.bracketFormat === 'round-robin') {
             this.setupRoundRobin();
+        } else if (this.bracketFormat === 'group-stage') {
+            this.setupGroupStage();
         } else {
             this.setupSingleElimination();
         }
@@ -264,6 +268,57 @@ class Tournament {
         // 2 teams: 1 + 1 round (F) = 2
         const knockoutRounds = Math.ceil(Math.log2(this.knockoutTeamsCount));
         this.totalRounds = 1 + knockoutRounds;
+    }
+
+    /**
+     * Setup group-stage format (4 groups with round-robin, then knockouts)
+     */
+    setupGroupStage() {
+        // Validate that all teams have groups assigned
+        const teamsWithoutGroup = this.teams.filter(t => !t.group);
+        if (teamsWithoutGroup.length > 0) {
+            throw new Error('All teams must be assigned to a group (A, B, C, or D)');
+        }
+
+        // Validate we have teams in all 4 groups
+        const groups = ['A', 'B', 'C', 'D'];
+        for (const group of groups) {
+            const groupTeams = this.teams.filter(t => t.group === group);
+            if (groupTeams.length === 0) {
+                throw new Error(`Group ${group} has no teams`);
+            }
+        }
+
+        let matchNumber = 1;
+
+        // Create round-robin matches within each group
+        for (const group of groups) {
+            const groupTeams = this.teams.filter(t => t.group === group)
+                .sort((a, b) => {
+                    const seedA = a.seed || 999;
+                    const seedB = b.seed || 999;
+                    return seedA - seedB;
+                });
+
+            // Create matches for every team combination within the group
+            for (let i = 0; i < groupTeams.length; i++) {
+                for (let j = i + 1; j < groupTeams.length; j++) {
+                    const match = new Match(
+                        `group-${group}-match-${matchNumber}`,
+                        groupTeams[i].id,
+                        groupTeams[j].id,
+                        1, // All group matches are "round 1"
+                        matchNumber,
+                        `group-${group}`
+                    );
+                    this.matches.push(match);
+                    matchNumber++;
+                }
+            }
+        }
+
+        // Set total rounds: 1 (group) + 2 (semi-finals) + 1 (final) = 4
+        this.totalRounds = 3;
     }
 
     /**
@@ -344,9 +399,11 @@ class Tournament {
                 // Mark stats as applied
                 existingMatch.statsApplied = true;
 
-                // Check if round-robin is complete and create finals if needed
+                // Check if round-robin or group-stage is complete and create knockouts if needed
                 if (existingMatch.stage === 'round-robin') {
                     this.checkAndCreateFinals();
+                } else if (existingMatch.stage && existingMatch.stage.startsWith('group-')) {
+                    this.checkAndCreateGroupStageKnockouts();
                 } else {
                     // Advance winner in elimination formats
                     this.advanceWinner(existingMatch);
@@ -382,9 +439,11 @@ class Tournament {
                     }
                 }
 
-                // Check if round-robin is complete and create finals if needed
+                // Check if round-robin or group-stage is complete and create knockouts if needed
                 if (existingMatch.stage === 'round-robin') {
                     this.checkAndCreateFinals();
+                } else if (existingMatch.stage && existingMatch.stage.startsWith('group-')) {
+                    this.checkAndCreateGroupStageKnockouts();
                 } else {
                     // Advance winner in elimination formats
                     this.advanceWinner(existingMatch);
@@ -414,6 +473,108 @@ class Tournament {
                 this.createKnockoutBracket(qualifiedTeams);
             }
         }
+    }
+
+    /**
+     * Check if group-stage is complete and create knockout matches
+     */
+    checkAndCreateGroupStageKnockouts() {
+        if (this.bracketFormat !== 'group-stage') return;
+
+        // Check if all group matches are complete
+        const groupMatches = this.matches.filter(m => m.stage && m.stage.startsWith('group-'));
+        const allComplete = groupMatches.every(m => m.isComplete);
+
+        if (allComplete && !this.roundRobinComplete) {
+            this.roundRobinComplete = true;
+
+            // Get winners from each group
+            const groups = ['A', 'B', 'C', 'D'];
+            const groupWinners = {};
+
+            for (const group of groups) {
+                const winner = this.getGroupWinner(group);
+                if (winner) {
+                    groupWinners[group] = winner;
+                }
+            }
+
+            // Create semi-finals: A vs B, C vs D (matching reference bracket layout)
+            if (groupWinners.A && groupWinners.B && groupWinners.C && groupWinners.D) {
+                // Semi-final 1: Winner of Group A vs Winner of Group B
+                const semi1 = new Match(
+                    'semi-1',
+                    groupWinners.A,
+                    groupWinners.B,
+                    2, // Round 2 = Semi-finals
+                    1,
+                    'semi-finals'
+                );
+                this.matches.push(semi1);
+
+                // Semi-final 2: Winner of Group C vs Winner of Group D
+                const semi2 = new Match(
+                    'semi-2',
+                    groupWinners.C,
+                    groupWinners.D,
+                    2, // Round 2 = Semi-finals
+                    2,
+                    'semi-finals'
+                );
+                this.matches.push(semi2);
+
+                // Create placeholder for finals (will be filled when semis complete)
+                const final = new Match(
+                    'final',
+                    null,
+                    null,
+                    3, // Round 3 = Finals
+                    1,
+                    'finals'
+                );
+                this.matches.push(final);
+            }
+        }
+    }
+
+    /**
+     * Get the winner of a specific group
+     */
+    getGroupWinner(group) {
+        const groupTeams = this.teams.filter(t => t.group === group);
+        if (groupTeams.length === 0) return null;
+
+        // Sort by points, then wins, then losses
+        const sorted = [...groupTeams].sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            if (b.wins !== a.wins) return b.wins - a.wins;
+            return a.losses - b.losses;
+        });
+
+        return sorted[0].id;
+    }
+
+    /**
+     * Get standings for a specific group
+     */
+    getGroupStandings(group) {
+        const groupTeams = this.teams.filter(t => t.group === group);
+
+        return [...groupTeams]
+            .sort((a, b) => {
+                if (b.points !== a.points) return b.points - a.points;
+                if (b.wins !== a.wins) return b.wins - a.wins;
+                return a.losses - b.losses;
+            })
+            .map((team, index) => ({
+                teamId: team.id,
+                teamName: team.name,
+                wins: team.wins,
+                losses: team.losses,
+                points: team.points,
+                rank: index + 1,
+                isWinner: index === 0
+            }));
     }
 
     /**
@@ -498,6 +659,21 @@ class Tournament {
         let nextMatch = this.matches.find(m =>
             m.round === nextRound && m.matchNumber === nextMatchNumber
         );
+
+        // For group-stage format, handle semi-finals advancing to finals
+        if (this.bracketFormat === 'group-stage' && match.stage === 'semi-finals') {
+            nextMatch = this.matches.find(m => m.stage === 'finals');
+
+            if (nextMatch) {
+                // Semi 1 winner goes to team1, Semi 2 winner goes to team2
+                if (match.matchNumber === 1) {
+                    nextMatch.team1Id = match.winner;
+                } else {
+                    nextMatch.team2Id = match.winner;
+                }
+            }
+            return;
+        }
 
         // Create next match if it doesn't exist
         if (!nextMatch) {

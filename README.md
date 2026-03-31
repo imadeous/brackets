@@ -320,19 +320,43 @@ Main application controller with reactive UI
 **Teams won't add**
 - Ensure all required fields are filled
 - Check that tournament hasn't started yet
+- Verify player names are not empty
 
 **Can't start tournament**
 - Need at least 2 teams registered
 - Verify team information is complete
+- Check for duplicate team names
 
 **Scores not saving**
 - Enter scores for at least Sets 1 and 2
 - Ensure values are valid numbers
+- Check that match belongs to current tournament
+
+**Bracket not displaying**
+- Ensure tournament is started (click "Start Tournament")
+- Check browser console for JavaScript errors
+- Verify browser supports HTML5 Canvas API
+- Try refreshing the page
+
+**Pan/Zoom not working**
+- Check that canvas is visible on screen
+- Verify browser supports touch events (mobile)
+- Try clicking directly on canvas area
+- Refresh page if canvas appears frozen
+
+**Blurry bracket on high-DPI display**
+- This is automatically handled - if blurry, report as a bug
+- Check devicePixelRatio in console (window.devicePixelRatio)
 
 **Data disappeared**
 - Check browser LocalStorage is enabled
 - Avoid clearing browser data/cache
-- Consider export feature for backups
+- Check if using private/incognito mode (data won't persist)
+
+**Mobile gestures not working**
+- Ensure touch events are enabled in browser
+- Try using two fingers for pinch-to-zoom
+- Update browser to latest version
 
 ## Development Notes
 
@@ -340,23 +364,61 @@ Main application controller with reactive UI
 
 To add new features:
 
-1. **New Tournament Type**: Update Tournament class type property and UI selects
-2. **Different Scoring**: Modify Match.calculateWinner() method
-3. **New Stats**: Add properties to Team class and update getStandings()
-4. **UI Customization**: Edit Tailwind classes in index.html
+1. **Canvas Customization**: 
+   - Edit `BracketRenderer` class in `bracket-renderer.js`
+   - Modify `drawMatch()` for match card appearance
+   - Adjust `MATCH_WIDTH`, `MATCH_HEIGHT` constants for sizing
 
-### Code Modification
+2. **New Tournament Type**: 
+   - Update `Tournament` class type property
+   - Add UI options in `index.html`
+   - Update team name display logic
 
-All business logic is in `models.js` - modify classes here for functionality changes.
-All UI logic is in `app.js` - modify Alpine.js methods here for interface changes.
-All markup is in `index.html` - modify HTML here for layout changes.
+3. **Different Scoring**: 
+   - Modify `Match.calculateWinner()` method
+   - Update match score input form
+   - Adjust points calculation in `getStandings()`
+
+4. **New Stats**: 
+   - Add properties to `Team` class
+   - Update `getStandings()` calculation
+   - Add columns to standings table
+
+5. **UI Customization**: 
+   - Edit Tailwind classes in `index.html`
+   - Modify Alpine.js reactive properties
+   - Add CSS animations
+
+### Code Modification Guidelines
+
+- **Business Logic** (`models.js`): Modify classes here for functionality changes
+- **Canvas Rendering** (`bracket-renderer.js`): Modify here for visual/interaction changes
+- **UI Logic** (`app.js`): Modify Alpine.js methods here for interface behavior
+- **Markup** (`index.html`): Modify HTML here for layout changes
+
+### Performance Considerations
+
+- Canvas rendering is optimized with `requestAnimationFrame` on zoom/pan
+- Device pixel ratio handled automatically for crisp rendering
+- Event listeners properly cleaned up to prevent memory leaks
+- LocalStorage updates are throttled to prevent excessive writes
+
+### Testing Recommendations
+
+- Test with 2, 4, 8, 16 teams to verify bracket generation
+- Test pan/zoom on both desktop and mobile devices
+- Test on high-DPI displays (Retina, 4K) for visual quality
+- Test LocalStorage persistence by refreshing browser
+- Test with Round Robin and Single Elimination formats
 
 ## Credits
 
 Built with:
-- [Alpine.js](https://alpinejs.dev/) - Lightweight JavaScript framework
+- [Alpine.js](https://alpinejs.dev/) - Lightweight reactive JavaScript framework
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
 - [Font Awesome](https://fontawesome.com/) - Icon library
+- HTML5 Canvas API - High-performance graphics rendering
+- Touch Events API - Mobile gesture support
 
 ## License
 
@@ -364,7 +426,28 @@ Free to use and modify for personal or commercial projects.
 
 ---
 
-**Version**: 1.0.0  
+**Version**: 2.0.0  
+**Last Updated**: March 2026  
+**Repository**: https://github.com/imadeous/brackets.git
+
+## Changelog
+
+### Version 2.0.0 (March 2026)
+- ✨ Added interactive HTML5 Canvas bracket visualization
+- 🖱️ Implemented pan and zoom controls (desktop)
+- 📱 Added mobile touch support (pan and pinch-to-zoom)
+- 🎨 High-DPI display support for crisp rendering
+- 📊 Improved standings table with status badges
+- 🏆 Enhanced champion display with animations
+- 📐 Added group stage visualization on bracket
+- 🔧 Numerous UI/UX improvements
+
+### Version 1.0.0 (Initial Release)
+- Basic tournament management
+- Round Robin + Knockout formats
+- Team and match management
+- LocalStorage persistence
+- Responsive design  
 **Last Updated**: March 2026  
 **Author**: Tournament Management System
 

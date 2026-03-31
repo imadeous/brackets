@@ -1,15 +1,14 @@
-# Badminton Tournament Bracket Management System
+# Tournament Bracket Management System
 
-A comprehensive, interactive web application for managing badminton tournaments with support for singles, doubles, and mixed-doubles formats.
+A comprehensive, interactive web application for managing tournaments with support for singles, doubles, and mixed-doubles formats. Features an interactive canvas-based bracket visualization with pan & zoom capabilities for desktop and mobile devices.
 
-## Features
+## ✨ Key Features
 
 ### 🏆 Tournament Management
 - **Multiple Tournament Types**: Singles, Doubles, and Mixed-Doubles support
 - **Flexible Bracket Formats**: 
   - **Round Robin + Knockout**: Group stage followed by Quarter-Finals → Semi-Finals → Finals
   - **Single Elimination**: Traditional knockout bracket
-  - **Double Elimination**: Coming soon
 - **Dynamic Team Management**: Add, edit, and delete teams with seeding support
 - **Real-time Bracket Generation**: Automatically creates tournament brackets based on team count
 - **Intelligent Knockout Qualification**: 
@@ -18,41 +17,70 @@ A comprehensive, interactive web application for managing badminton tournaments 
   - 4-7 teams: Top 4 advance
   - 2-3 teams: Top 2 advance
 
+### 🎨 Interactive Canvas Bracket Visualization
+- **HTML5 Canvas Rendering**: High-performance bracket display with crisp graphics
+- **Pan & Zoom Controls**: 
+  - **Desktop**: Click and drag to pan, scroll wheel to zoom
+  - **Mobile**: Single finger swipe to pan, two-finger pinch to zoom
+- **Zoom Limits**: 0.5x to 2.0x with smooth transitions
+- **Zoom Indicator**: Real-time zoom percentage display
+- **High-DPI Support**: Automatically scales for Retina and high-resolution displays
+- **Responsive Design**: Adapts to all screen sizes and devices
+- **Visual Match Cards**: Team names, scores, and match status clearly displayed
+- **Group Stage Display**: Round-robin matches shown on bracket sides
+
 ### 📊 Match Score Tracking
-- **Best-of-3 Sets**: Complete scoring system for badminton matches
+- **Best-of-3 Sets**: Complete scoring system for matches
 - **Automatic Winner Detection**: Calculates winners based on sets won
 - **Round-by-Round Navigation**: Easy access to matches in each tournament round
 - **Live Updates**: Bracket and standings update in real-time as scores are entered
+- **Score Validation**: Ensures all required sets have valid scores
 
 ### 📈 Standings & Analytics
 - **Live Standings Table**: Real-time team rankings based on wins/losses/points
-- **Visual Bracket Display**: Interactive tournament tree view showing all knockout rounds
-- **Champion Celebration**: Special display for tournament winners
-- **Team Status Tracking**: Champion, Finalist, Semi-Finalist, Quarter-Finalist, Active, or Eliminated status
-- **Team Status Tracking**: Active, Eliminated, or Champion status
+- **Detailed Statistics**: Points (Round Robin), wins, losses, and current status
+- **Visual Status Badges**: Color-coded status indicators
+  - 🏆 Champion (Gold)
+  - 🥈 Finalist (Purple)
+  - 🥉 Semi-Finalist (Blue)
+  - 🎯 Quarter-Finalist (Indigo)
+  - ✅ Active (Green)
+  - ❌ Eliminated (Red)
+- **Champion Celebration**: Special animated display for tournament winners with trophy icon
+- **Responsive Tables**: Optimized for mobile and desktop viewing
 
 ### 💾 Data Persistence
 - **LocalStorage Integration**: All data saved automatically to browser storage
 - **No Server Required**: Completely client-side application
 - **Auto-save**: Changes saved instantly as you work
+- **Persistent State**: Tournament data survives browser refresh
+
+### 📱 Mobile Optimized
+- **Touch-Friendly Interface**: All controls optimized for touch input
+- **Mobile Navigation**: Bottom navigation bar for easy tab switching
+- **Gesture Support**: Pan and pinch-to-zoom on bracket canvas
+- **Responsive Layout**: Adapts seamlessly from phone to desktop
 
 ## Tech Stack
 
 - **Frontend Framework**: Alpine.js 3.x for reactive UI
+- **Graphics**: HTML5 Canvas API for high-performance bracket rendering
 - **Styling**: Tailwind CSS for modern, responsive design
 - **Icons**: Font Awesome 6.4 for beautiful iconography
 - **Architecture**: Object-Oriented JavaScript (ES6+ Classes)
 - **Storage**: Browser LocalStorage API
+- **Input Handling**: Mouse events and Touch Events API
 
 ## File Structure
 
 ```
 bracket/
-├── index.html          # Main application HTML
+├── index.html              # Main application HTML & UI
 ├── js/
-│   ├── models.js      # OOP classes (Team, Match, Tournament, StorageManager)
-│   └── app.js         # Alpine.js application logic
-└── README.md          # This file
+│   ├── models.js          # OOP classes (Team, Match, Tournament, StorageManager)
+│   ├── bracket-renderer.js # Canvas-based bracket visualization engine
+│   └── app.js             # Alpine.js application logic & event handlers
+└── README.md              # This file
 ```
 
 ## Installation & Setup
@@ -108,43 +136,126 @@ bracket/
 6. **Round Robin**: Winners earn 3 points, knockout bracket generates after group stage completes
 7. **Elimination**: Winners advance to the next round automatically
 
-### 5. View Bracket & Standings
+### 5. View Interactive Bracket & Standings
 1. Go to **Bracket & Standings** tab
-2. View the visual tournament bracket
-3. Check current standings table
-4. See the champion when the tournament is complete
+2. **Navigate the Canvas Bracket**:
+   - **Desktop**: 
+     - Click and drag to pan around the bracket
+     - Use mouse wheel/trackpad to zoom in/out
+     - Zoom range: 0.5x (50%) to 2.0x (200%)
+   - **Mobile**:
+     - Swipe with one finger to pan
+     - Pinch with two fingers to zoom in/out
+   - Zoom indicator shows current zoom level in bottom-right corner
+3. View match details directly on the canvas:
+   - Team names displayed on match cards
+   - Set scores shown for completed matches
+   - Connecting lines show advancement paths
+   - Group stage matches (Round Robin) appear on bracket sides
+4. Check **Current Standings** table below the bracket:
+   - Real-time team rankings
+   - Points (Round Robin format), wins, and losses
+   - Color-coded status badges
+5. See the **Champion Display** when tournament is complete:
+   - Gold trophy animation
+   - Champion team name prominently displayed
+
+## Canvas Bracket Controls
+
+### Desktop Controls
+- **Pan**: Click and drag anywhere on the canvas
+- **Zoom In**: Scroll wheel up / Trackpad pinch out
+- **Zoom Out**: Scroll wheel down / Trackpad pinch in
+- **Cursor**: Changes to "grab" hand when hovering over canvas
+
+### Mobile/Touch Controls
+- **Pan**: Touch and drag with one finger
+- **Zoom**: Pinch with two fingers (spread to zoom in, pinch to zoom out)
+- **Smooth Gestures**: Natural touch response with momentum
+
+### Visual Elements
+- **Match Cards**: 220×80px cards with team names and scores
+- **Connection Lines**: Show tournament progression paths
+- **Round Labels**: Clear identification of tournament stages
+- **Group Matches**: Round-robin matches displayed on left/right sides
+- **High-DPI Rendering**: Crisp visuals on Retina and 4K displays
 
 ## Key Classes & Architecture
 
-### Team Class
-Represents a badminton team (player or pair)
+### BracketRenderer Class (bracket-renderer.js)
+Canvas-based bracket visualization engine
+- **Properties**: canvas, ctx, app, zoom, panX, panY, isDragging, touches, minZoom, maxZoom
+- **Rendering Methods**: 
+  - `render()`: Main draw loop with pan/zoom transforms
+  - `drawMatch()`: Renders individual match cards with teams and scores
+  - `drawConnectingLine()`: Draws lines between matches
+  - `drawRoundLabel()`: Labels tournament rounds
+  - `drawZoomIndicator()`: Shows current zoom level
+- **Interaction Methods**:
+  - `handleMouseDown/Move/Up()`: Desktop pan functionality
+  - `handleWheel()`: Mouse/trackpad zoom
+  - `handleTouchStart/Move/End()`: Mobile gesture support
+  - `getTouchDistance()`: Calculates pinch distance for zoom
+- **Utility Methods**: 
+  - `setCanvasSize()`: Handles responsive sizing and DPR scaling
+  - `getCanvasCoordinates()`: Converts screen to canvas coordinates
+
+### Team Class (models.js)
+Represents a tournament team (player or pair)
 - Properties: id, player1, player2, seed, type, wins, losses, points
 - Methods: name getter, toJSON(), fromJSON()
 
-### Match Class
+### Match Class (models.js)
 Represents a single match in the tournament
 - Properties: teams, scores (3 sets), round, winner, stage (round-robin/quarter-finals/semi-finals/finals/knockout)
 - Methods: calculateWinner(), toJSON(), fromJSON()
 
-### Tournament Class
+### Tournament Class (models.js)
 Main tournament management logic
 - Properties: name, type, teams, matches, bracket format, roundRobinComplete, knockoutTeamsCount
-- Methods: addTeam(), setupBracket(), updateMatch(), advanceWinner(), getStandings(), setupRoundRobin(), checkAndCreateFinals(), createKnockoutBracket(), getKnockoutStageName()
+- Key Methods: 
+  - `addTeam()`: Add new team with validation
+  - `setupBracket()`: Generate tournament structure
+  - `updateMatch()`: Update match scores and advance winners
+  - `getStandings()`: Calculate current rankings with points/wins/losses
+  - `setupRoundRobin()`: Create all group stage matches
+  - `createKnockoutBracket()`: Generate elimination rounds from standings
+  - `getKnockoutStageName()`: Determine match stage (Finals, Semi-Finals, etc.)
 
-### StorageManager Class
+### StorageManager Class (models.js)
 Handles LocalStorage persistence
 - Methods: save(), load(), clear(), exists()
 
+### App (app.js - Alpine.js)
+Main application controller with reactive UI
+- Manages tournament state and user interactions
+- Coordinates between models and views
+- Handles tab navigation and form submissions
+- Initializes BracketRenderer and coordinates updates
+
 ## Browser Compatibility
 
-- Chrome/Edge: ✅ Full support
-- Firefox: ✅ Full support
-- Safari: ✅ Full support
-- Opera: ✅ Full support
+- Chrome/Edge: ✅ Full support (Desktop + Mobile)
+- Firefox: ✅ Full support (Desktop + Mobile)
+- Safari: ✅ Full support (Desktop + iOS)
+- Opera: ✅ Full support (Desktop + Mobile)
 
-**Requirements**: Modern browser with ES6+ support and LocalStorage enabled
+**Requirements**: 
+- Modern browser with ES6+ support
+- HTML5 Canvas API support
+- Touch Events API support (for mobile gestures)
+- LocalStorage enabled
 
 ## Features in Detail
+
+### Canvas-Based Bracket Visualization
+- **High Performance**: Smooth rendering even with large tournaments
+- **DPR Scaling**: Automatically detects and adjusts for high-DPI displays (2x, 3x)
+- **Transform Matrix**: Uses canvas transforms for smooth pan and zoom
+- **Event Delegation**: Efficient event handling for mouse and touch input
+- **Visual Feedback**: Cursor changes and real-time zoom indicator
+- **Responsive Container**: 800px height, adapts width to screen size
+- **Virtual Canvas**: Large virtual space (1600px+ width) navigated via pan/zoom
 
 ### Round Robin + Knockout Format
 - **Group Stage**: Each team plays against every other team once
@@ -155,13 +266,14 @@ Handles LocalStorage persistence
   - 8-15 teams → Quarter-Finals → Semi-Finals → Finals
   - 4-7 teams → Semi-Finals → Finals
   - 2-3 teams → Finals only
-- **Seeding**: Higher-ranked teams face lower-ranked teams in first knockout round (1 vs last, 2 vs second-to-last, etc.)
+- **Seeding**: Higher-ranked teams face lower-ranked teams in first knockout round
 - **Champion**: Winner of the finals match becomes tournament champion
+- **Visual Integration**: Group stage matches displayed on both sides of knockout bracket
 
 ### Seeding System
 - Optional seed numbers for fair bracket placement
 - Higher seeds (lower numbers) placed strategically
-- Automatic bye rounds for non-power-of-2 team counts (elimination formats)
+- Preserves seeding through knockout rounds
 
 ### Automatic Bracket Generation
 - Calculates optimal number of rounds
@@ -174,29 +286,34 @@ Handles LocalStorage persistence
 - Ensures all required sets have scores
 - Validates winner determination (2 sets minimum)
 - Updates team statistics automatically
+- Real-time bracket updates
 
 ### Data Persistence
 - Auto-saves after every change
 - Survives browser refresh
 - Clear data option available
+- Efficient JSON serialization
 
-## Limitations & Future Enhancements
+## Current Limitations & Future Enhancements
 
 ### Current Limitations
-- Single elimination only (double elimination in code but not UI complete)
-- No group stage support
+- Canvas bracket is view-only (click matches in Match Scores tab to edit)
+- No double elimination format
 - No export/print functionality
-- Basic notification system
+- Single tournament at a time
 
 ### Potential Enhancements
-- PDF export of brackets
-- Double elimination full implementation
-- Group stage + knockout rounds
-- Match scheduling with dates/times
-- Player statistics and history
-- Multi-tournament management
-- Theme customization
-- Email/SMS notifications
+- 📄 **PDF/Image Export**: Export bracket as PDF or PNG
+- 🖱️ **Click-to-Edit**: Click matches on canvas to edit scores directly
+- 🏅 **Double Elimination**: Complete double elimination bracket support
+- 📅 **Match Scheduling**: Assign dates/times to matches
+- 📊 **Advanced Statistics**: Player performance analytics and history
+- 🗂️ **Multi-Tournament**: Manage multiple tournaments simultaneously
+- 🎨 **Theme Customization**: Dark mode and custom color schemes
+- 📧 **Notifications**: Email/SMS match reminders
+- 💾 **Cloud Sync**: Save tournaments to cloud storage
+- 🔄 **Undo/Redo**: Tournament action history
+- 📱 **Mobile App**: Native mobile application
 
 ## Troubleshooting
 

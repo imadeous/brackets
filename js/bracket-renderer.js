@@ -128,6 +128,12 @@ class BracketRenderer {
             return;
         }
 
+        // Check if this is a two-group tournament
+        if (this.app.tournament.bracketFormat === 'two-group') {
+            this.renderTwoGroup();
+            return;
+        }
+
         // Check if this is a group-stage tournament
         if (this.app.tournament.bracketFormat === 'group-stage') {
             this.renderGroupStage();
@@ -684,8 +690,8 @@ class BracketRenderer {
         // Position groups: A & C on left (they feed QF1/QF3), B & D on right (they feed QF2/QF4)
         // This eliminates all cross-connections in the bracket lines
         const groupPositions = {
-            'A': { x: groupsLeftX,  y: centerY - groupHeight - verticalSpacing / 2 },
-            'C': { x: groupsLeftX,  y: centerY + verticalSpacing / 2 },
+            'A': { x: groupsLeftX, y: centerY - groupHeight - verticalSpacing / 2 },
+            'C': { x: groupsLeftX, y: centerY + verticalSpacing / 2 },
             'B': { x: groupsRightX, y: centerY - groupHeight - verticalSpacing / 2 },
             'D': { x: groupsRightX, y: centerY + verticalSpacing / 2 }
         };
@@ -923,7 +929,7 @@ class BracketRenderer {
             this.ctx.stroke();
         };
 
-        const winnerColor   = '#3b82f6'; // blue  – winner line
+        const winnerColor = '#3b82f6'; // blue  – winner line
         const runnerUpColor = '#f97316'; // orange – runner-up line
 
         // ── Left side: Group A (top) & Group C (bottom) → QF1 & QF3 ────
@@ -1013,6 +1019,217 @@ class BracketRenderer {
         // Draw zoom indicator
         this.drawZoomIndicator();
 
+    }
+
+    /**
+     * Render two-group bracket
+     */
+    renderTwoGroup() {
+        this.setCanvasSize();
+        this.clear();
+
+        const width = this.canvas.width / (window.devicePixelRatio || 1);
+        const height = this.canvas.height / (window.devicePixelRatio || 1);
+
+        // Add background
+        this.ctx.fillStyle = '#f9fafb';
+        this.ctx.fillRect(0, 0, width, height);
+
+        // Center the content on first render if not panned
+        if (!this.hasBeenPanned) {
+            this.panX = 50;
+            this.panY = 50;
+        }
+
+        // Apply pan and zoom transformations
+        this.ctx.save();
+        this.ctx.translate(this.panX, this.panY);
+        this.ctx.scale(this.zoom, this.zoom);
+
+        this.matchBoxes = [];
+
+        const groups = ['A', 'B'];
+        const groupColors = {
+            'A': { bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+            'B': { bg: '#eff6ff', border: '#2563eb', text: '#1e40af' }
+        };
+
+        const groupWidth = 200;
+        const groupHeight = 280;
+        const horizontalGap = 180;
+        const centerY = height / (2 * this.zoom) - this.panY / this.zoom;
+        const leftX = 50;
+
+        // Calculate positions
+        const groupsLeftX = leftX;
+        const groupsRightX = width / this.zoom - this.panX / this.zoom - groupWidth - leftX;
+        const finalsX = (width / this.zoom - this.panX / this.zoom - this.matchWidth) / 2;
+
+        // Position groups: A on left, B on right
+        const groupPositions = {
+            'A': { x: groupsLeftX, y: centerY - groupHeight / 2 },
+            'B': { x: groupsRightX, y: centerY - groupHeight / 2 }
+        };
+
+        // Draw each group
+        groups.forEach(group => {
+            const pos = groupPositions[group];
+            const groupMatches = this.app.getGroupMatches(group);
+            const colors = groupColors[group];
+
+            console.log(`Group ${group}: Found ${groupMatches.length} matches`, groupMatches);
+
+            // Draw group container
+            this.ctx.fillStyle = colors.bg;
+            this.ctx.strokeStyle = colors.border;
+            this.ctx.lineWidth = 3;
+            this.roundRect(pos.x, pos.y, groupWidth, groupHeight, 8);
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            // Draw group title
+            this.ctx.fillStyle = colors.text;
+            this.ctx.font = 'bold 20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`Group ${group}`, pos.x + groupWidth / 2, pos.y + 30);
+
+            // Draw "Group Stage" label
+            this.ctx.fillStyle = '#6b7280';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText('Group Stage', pos.x + groupWidth / 2, pos.y - 10);
+
+            // Draw match count
+            this.ctx.fillStyle = '#6b7280';
+            this.ctx.font = '11px Arial';
+            this.ctx.fillText(`${groupMatches.length} matches`, pos.x + groupWidth / 2, pos.y + 50);
+            this.ctx.textAlign = 'left';
+
+            // Draw compact match list
+            this.ctx.fillStyle = '#374151';
+            this.ctx.font = '10px Arial';
+
+            const maxMatchesToShow = 8;
+            const matchesToShow = groupMatches.slice(0, maxMatchesToShow);
+
+            matchesToShow.forEach((match, index) => {
+                const yPos = pos.y + 70 + index * 24;
+
+                if (yPos + 20 > pos.y + groupHeight - 10) return;
+
+                const team1Name = this.app.getTeamName(match.team1Id);
+                const team2Name = this.app.getTeamName(match.team2Id);
+
+                // Highlight winner
+                if (match.winner) {
+                    this.ctx.fillStyle = colors.text;
+                    this.ctx.font = 'bold 10px Arial';
+                } else if (match.hasScores && match.hasScores()) {
+                    this.ctx.fillStyle = '#3b82f6';
+                    this.ctx.font = '10px Arial';
+                } else {
+                    this.ctx.fillStyle = '#6b7280';
+                    this.ctx.font = '10px Arial';
+                }
+
+                // Truncate names
+                const displayName1 = team1Name.length > 8 ? team1Name.substring(0, 8) + '...' : team1Name;
+                const displayName2 = team2Name.length > 8 ? team2Name.substring(0, 8) + '...' : team2Name;
+
+                this.ctx.fillText(`${displayName1} vs ${displayName2}`, pos.x + 10, yPos);
+
+                // Show result if available
+                if (match.winner) {
+                    this.ctx.fillStyle = '#16a34a';
+                    this.ctx.font = 'bold 9px Arial';
+                    this.ctx.fillText('✓', pos.x + groupWidth - 20, yPos);
+                } else if (match.hasScores && match.hasScores()) {
+                    this.ctx.fillStyle = '#3b82f6';
+                    this.ctx.font = '9px Arial';
+                    this.ctx.fillText('•', pos.x + groupWidth - 20, yPos);
+                }
+            });
+
+            // Show "+X more" if there are more matches
+            if (groupMatches.length > maxMatchesToShow) {
+                const remainingCount = groupMatches.length - maxMatchesToShow;
+                this.ctx.fillStyle = '#9ca3af';
+                this.ctx.font = 'italic 10px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`+${remainingCount} more`, pos.x + groupWidth / 2, pos.y + groupHeight - 15);
+            }
+        });
+
+        // Draw finals in the center
+        const finalsY = centerY - this.matchHeight / 2;
+        const finalsMatch = this.app.getMatchesByRound(2); // Round 2 = Finals
+
+        // Draw "Final" label
+        this.ctx.fillStyle = '#1f2937';
+        this.ctx.font = 'bold 16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Final', finalsX + this.matchWidth / 2, finalsY - 15);
+
+        if (finalsMatch.length > 0 && finalsMatch[0]) {
+            // Draw actual final match
+            this.drawMatch(finalsMatch[0], finalsX, finalsY, true);
+
+            // Draw trophy
+            const trophyX = finalsX + this.matchWidth / 2;
+            const trophyY = finalsY + this.matchHeight + 60;
+            this.ctx.fillStyle = '#fbbf24';
+            this.ctx.font = 'bold 48px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('🏆', trophyX, trophyY);
+
+            // Draw champion if finals complete
+            if (finalsMatch[0].winner) {
+                const championTeam = this.app.tournament.teams.find(t => t.id === finalsMatch[0].winner);
+                if (championTeam) {
+                    this.ctx.fillStyle = '#fbbf24';
+                    this.ctx.font = 'bold 24px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('🏆 CHAMPION 🏆', trophyX, trophyY + 60);
+
+                    this.ctx.fillStyle = '#1f2937';
+                    this.ctx.font = 'bold 16px Arial';
+
+                    // Display player names
+                    this.ctx.fillText(championTeam.player1, trophyX, trophyY + 90);
+
+                    if (championTeam.player2) {
+                        this.ctx.fillText(championTeam.player2, trophyX, trophyY + 110);
+                    }
+                }
+            }
+        } else {
+            // Draw placeholder final match
+            this.drawPlaceholderMatch('Final', finalsX, finalsY, this.matchWidth, this.matchHeight, 'Winner Group A', 'Winner Group B');
+        }
+
+        // Draw connection lines from groups to finals
+        const groupACenter = { x: groupPositions.A.x + groupWidth, y: groupPositions.A.y + groupHeight / 2 };
+        const groupBCenter = { x: groupPositions.B.x, y: groupPositions.B.y + groupHeight / 2 };
+        const finalsLeftTeam = { x: finalsX, y: finalsY + this.matchHeight / 4 };
+        const finalsRightTeam = { x: finalsX + this.matchWidth, y: finalsY + this.matchHeight * 3 / 4 };
+
+        // Draw connector from Group A
+        this.ctx.strokeStyle = '#cbd5e1';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupACenter.x, groupACenter.y);
+        this.ctx.lineTo(finalsLeftTeam.x, finalsLeftTeam.y);
+        this.ctx.stroke();
+
+        // Draw connector from Group B
+        this.ctx.beginPath();
+        this.ctx.moveTo(groupBCenter.x, groupBCenter.y);
+        this.ctx.lineTo(finalsRightTeam.x, finalsRightTeam.y);
+        this.ctx.stroke();
+
+        // Restore context
+        this.ctx.restore();
+
+        this.drawZoomIndicator();
     }
 
     /**

@@ -138,6 +138,12 @@ function tournamentApp() {
             }
 
             // Check if group is required for group-stage format
+            if (this.tournament.bracketFormat === 'two-group' && !this.newTeam.group) {
+                alert('Please select a group (A or B)');
+                return;
+            }
+
+            // Check if group is required for group-stage format
             if (this.tournament.bracketFormat === 'group-stage' && !this.newTeam.group) {
                 alert('Please select a group (A, B, C, or D)');
                 return;
@@ -190,6 +196,20 @@ function tournamentApp() {
             const newSeed = prompt('Enter seed (leave empty for none):', team.seed || '');
             if (newSeed !== null) {
                 updates.seed = newSeed.trim() ? parseInt(newSeed) : null;
+            }
+
+            // Allow editing group if two-group format
+            if (this.tournament.bracketFormat === 'two-group') {
+                const currentGroup = team.group || 'Not assigned';
+                const newGroup = prompt(`Assign to group (A or B).\nCurrent: ${currentGroup}`, team.group || '');
+                if (newGroup !== null) {
+                    const groupUpper = newGroup.trim().toUpperCase();
+                    if (groupUpper && !['A', 'B'].includes(groupUpper)) {
+                        alert('Group must be A or B');
+                        return;
+                    }
+                    updates.group = groupUpper || null;
+                }
             }
 
             // Allow editing group if group-stage format
@@ -404,6 +424,59 @@ function tournamentApp() {
         getRounds() {
             // Force Alpine.js to track updateCounter as a dependency
             const _ = this.updateCounter;
+
+            // Defensive: Ensure group-stage tournaments have 4 rounds
+            if (this.tournament.bracketFormat === 'group-stage' && this.tournament.isSetup) {
+                if (this.tournament.totalRounds !== 4) {
+                    this.tournament.totalRounds = 4;
+                    this.saveTournament();
+                }
+
+                // Ensure Finals match exists if knockouts have been created
+                const hasKnockouts = this.tournament.matches.some(m => m.round === 2);
+                const hasFinals = this.tournament.matches.some(m => m.round === 4 || m.stage === 'finals');
+
+                if (hasKnockouts && !hasFinals) {
+                    const Match = window.Match; // Access Match class
+                    const final = new Match(
+                        'final',
+                        null,
+                        null,
+                        4, // Round 4 = Finals
+                        1,
+                        'finals'
+                    );
+                    this.tournament.matches.push(final);
+                    this.saveTournament();
+                }
+            }
+
+            // Defensive: Ensure two-group tournaments have 2 rounds
+            if (this.tournament.bracketFormat === 'two-group' && this.tournament.isSetup) {
+                if (this.tournament.totalRounds !== 2) {
+                    this.tournament.totalRounds = 2;
+                    this.saveTournament();
+                }
+
+                // Ensure Finals match exists if groups have been completed
+                const hasGroupMatches = this.tournament.matches.some(m => m.round === 1);
+                const hasFinals = this.tournament.matches.some(m => m.round === 2 || m.stage === 'finals');
+
+                if (hasGroupMatches && !hasFinals && this.tournament.roundRobinComplete) {
+                    const Match = window.Match; // Access Match class
+                    const final = new Match(
+                        'final',
+                        null,
+                        null,
+                        2, // Round 2 = Finals
+                        1,
+                        'finals'
+                    );
+                    this.tournament.matches.push(final);
+                    this.saveTournament();
+                }
+            }
+
             const rounds = [];
             for (let i = 1; i <= this.tournament.totalRounds; i++) {
                 rounds.push(i);
@@ -427,6 +500,12 @@ function tournamentApp() {
                 if (fromFinal === 3) return 'Round of 16';
 
                 return `Knockout Round ${round - 1}`;
+            }
+
+            if (this.tournament.bracketFormat === 'two-group') {
+                if (round === 1) return 'Group Stage';
+                if (round === 2) return 'Finals';
+                return `Round ${round}`;
             }
 
             if (this.tournament.bracketFormat === 'group-stage') {
@@ -478,6 +557,9 @@ function tournamentApp() {
             // Recalculate winner
             match.calculateWinner();
 
+            // Mark as just saved
+            match.justSaved = true;
+
             this.tournament.updateMatch(match);
             this.saveTournament();
             this.updateCounter++; // Trigger Alpine reactivity
@@ -488,6 +570,14 @@ function tournamentApp() {
             } else {
                 this.showNotification('Match score saved!', 'success');
             }
+        },
+
+        /**
+         * Clear the saved flag when match scores are modified
+         */
+        onMatchScoreChange(match) {
+            match.justSaved = false;
+            this.checkWinner(match);
         },
 
         /**
@@ -572,7 +662,10 @@ function tournamentApp() {
         getGroupMatches(group) {
             // Force Alpine.js to track updateCounter as a dependency
             const _ = this.updateCounter;
-            return this.tournament.matches.filter(m => m.stage === `group-${group}`);
+            const matches = this.tournament.matches.filter(m => m.stage === `group-${group}`);
+            console.log(`getGroupMatches(${group}): filter stage='group-${group}', found ${matches.length} matches`);
+            console.log('All matches:', this.tournament.matches.map(m => ({ id: m.id, stage: m.stage, round: m.round })));
+            return matches;
         },
 
         /**

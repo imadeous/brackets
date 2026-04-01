@@ -223,6 +223,8 @@ class Tournament {
 
         if (this.bracketFormat === 'round-robin') {
             this.setupRoundRobin();
+        } else if (this.bracketFormat === 'two-group') {
+            this.setupTwoGroup();
         } else if (this.bracketFormat === 'group-stage') {
             this.setupGroupStage();
         } else {
@@ -330,6 +332,57 @@ class Tournament {
     }
 
     /**
+     * Setup two-group format (2 groups with round-robin, then final)
+     */
+    setupTwoGroup() {
+        // Validate that all teams have groups assigned
+        const teamsWithoutGroup = this.teams.filter(t => !t.group);
+        if (teamsWithoutGroup.length > 0) {
+            throw new Error('All teams must be assigned to a group (A or B)');
+        }
+
+        // Validate we have teams in both groups
+        const groups = ['A', 'B'];
+        for (const group of groups) {
+            const groupTeams = this.teams.filter(t => t.group === group);
+            if (groupTeams.length === 0) {
+                throw new Error(`Group ${group} has no teams`);
+            }
+        }
+
+        let matchNumber = 1;
+
+        // Create round-robin matches within each group
+        for (const group of groups) {
+            const groupTeams = this.teams.filter(t => t.group === group)
+                .sort((a, b) => {
+                    const seedA = a.seed || 999;
+                    const seedB = b.seed || 999;
+                    return seedA - seedB;
+                });
+
+            // Create matches for every team combination within the group
+            for (let i = 0; i < groupTeams.length; i++) {
+                for (let j = i + 1; j < groupTeams.length; j++) {
+                    const match = new Match(
+                        `group-${group}-match-${matchNumber}`,
+                        groupTeams[i].id,
+                        groupTeams[j].id,
+                        1, // All group matches are "round 1"
+                        matchNumber,
+                        `group-${group}`
+                    );
+                    this.matches.push(match);
+                    matchNumber++;
+                }
+            }
+        }
+
+        // Set total rounds: 1 (group) + 1 (final)
+        this.totalRounds = 2;
+    }
+
+    /**
      * Setup single elimination bracket
      */
     setupSingleElimination() {
@@ -410,6 +463,8 @@ class Tournament {
                 // Check if round-robin or group-stage is complete and create knockouts if needed
                 if (existingMatch.stage === 'round-robin') {
                     this.checkAndCreateFinals();
+                } else if (this.bracketFormat === 'two-group' && existingMatch.stage && existingMatch.stage.startsWith('group-')) {
+                    this.checkAndCreateTwoGroupKnockouts();
                 } else if (existingMatch.stage && existingMatch.stage.startsWith('group-')) {
                     this.checkAndCreateGroupStageKnockouts();
                 } else {
@@ -450,6 +505,8 @@ class Tournament {
                 // Check if round-robin or group-stage is complete and create knockouts if needed
                 if (existingMatch.stage === 'round-robin') {
                     this.checkAndCreateFinals();
+                } else if (this.bracketFormat === 'two-group' && existingMatch.stage && existingMatch.stage.startsWith('group-')) {
+                    this.checkAndCreateTwoGroupKnockouts();
                 } else if (existingMatch.stage && existingMatch.stage.startsWith('group-')) {
                     this.checkAndCreateGroupStageKnockouts();
                 } else {
@@ -583,6 +640,44 @@ class Tournament {
                     null,
                     null,
                     4, // Round 4 = Finals
+                    1,
+                    'finals'
+                );
+                this.matches.push(final);
+            }
+        }
+    }
+
+    /**
+     * Check if two-group stage is complete and create final match
+     */
+    checkAndCreateTwoGroupKnockouts() {
+        if (this.bracketFormat !== 'two-group') return;
+
+        // Check if all group matches are complete
+        const groupMatches = this.matches.filter(m => m.stage && m.stage.startsWith('group-'));
+        const allComplete = groupMatches.every(m => m.isComplete);
+
+        if (allComplete && !this.roundRobinComplete) {
+            this.roundRobinComplete = true;
+
+            // Get winners from each group
+            const groups = ['A', 'B'];
+            const groupWinners = {};
+
+            for (const group of groups) {
+                const winner = this.getGroupWinner(group);
+                if (winner) groupWinners[group] = winner;
+            }
+
+            // Create Finals with group winners
+            if (groupWinners.A && groupWinners.B) {
+                // Final: Winner A vs Winner B
+                const final = new Match(
+                    'final',
+                    groupWinners.A,
+                    groupWinners.B,
+                    2, // Round 2 = Finals
                     1,
                     'finals'
                 );

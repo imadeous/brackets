@@ -681,11 +681,12 @@ class BracketRenderer {
         const qfRightX = semiRightX + this.matchWidth + qfToSemiGap; // Right side QFs (QF2, QF4)
         const groupsRightX = qfRightX + this.matchWidth + horizontalGap;
 
-        // Position groups: A & B on left, C & D on right
+        // Position groups: A & C on left (they feed QF1/QF3), B & D on right (they feed QF2/QF4)
+        // This eliminates all cross-connections in the bracket lines
         const groupPositions = {
-            'A': { x: groupsLeftX, y: centerY - groupHeight - verticalSpacing / 2 },
-            'B': { x: groupsLeftX, y: centerY + verticalSpacing / 2 },
-            'C': { x: groupsRightX, y: centerY - groupHeight - verticalSpacing / 2 },
+            'A': { x: groupsLeftX,  y: centerY - groupHeight - verticalSpacing / 2 },
+            'C': { x: groupsLeftX,  y: centerY + verticalSpacing / 2 },
+            'B': { x: groupsRightX, y: centerY - groupHeight - verticalSpacing / 2 },
             'D': { x: groupsRightX, y: centerY + verticalSpacing / 2 }
         };
 
@@ -908,105 +909,110 @@ class BracketRenderer {
             this.drawPlaceholderMatch('Semi 2', semiRightX, semi2Y, this.matchWidth, this.matchHeight, 'Winner QF2', 'Winner QF4');
         }
 
-        // Draw connector lines - ALWAYS show to indicate tournament flow
-        this.ctx.strokeStyle = '#94a3b8';
-        this.ctx.lineWidth = 2;
+        // Draw connector lines - Groups → QFs → SFs → Finals
+        // Layout: A & C on left → feed QF1 & QF3 (no crossing)
+        //         B & D on right → feed QF2 & QF4 (no crossing)
         this.ctx.setLineDash([]);
 
-        // Groups to Quarter-finals
-        // Group A → QF1 (Winner A to top left QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight / 3);
-        this.ctx.lineTo(qfLeftX, qf1Y + this.matchHeight / 3);
-        this.ctx.stroke();
+        const drawLine = (x1, y1, x2, y2, color, width = 2) => {
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = width;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x1, y1);
+            this.ctx.lineTo(x2, y2);
+            this.ctx.stroke();
+        };
 
-        // Group C → QF1 (Runner-up C to top left QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + groupHeight / 3);
-        this.ctx.lineTo(qfRightX + this.matchWidth, qf1Y + this.matchHeight / 3);
-        this.ctx.lineTo(qfLeftX + this.matchWidth / 2, qf1Y + this.matchHeight / 3);
-        this.ctx.lineTo(qfLeftX + this.matchWidth, qf1Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
+        const winnerColor   = '#3b82f6'; // blue  – winner line
+        const runnerUpColor = '#f97316'; // orange – runner-up line
 
-        // Group B → QF2 (Winner B to top right QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + groupHeight / 3);
-        this.ctx.lineTo(qfRightX, qf2Y + this.matchHeight / 3);
-        this.ctx.stroke();
+        // ── Left side: Group A (top) & Group C (bottom) → QF1 & QF3 ────
+        // Winner A → QF1 (team1 slot = top quarter of card)
+        drawLine(
+            groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight * 0.35,
+            qfLeftX, qf1Y + this.matchHeight * 0.25,
+            winnerColor
+        );
+        // Runner-up A → QF3 (team2 slot = bottom quarter of card)
+        drawLine(
+            groupPositions['A'].x + groupWidth, groupPositions['A'].y + groupHeight * 0.65,
+            qfLeftX, qf3Y + this.matchHeight * 0.75,
+            runnerUpColor
+        );
+        // Winner C → QF3 (team1 slot)
+        drawLine(
+            groupPositions['C'].x + groupWidth, groupPositions['C'].y + groupHeight * 0.35,
+            qfLeftX, qf3Y + this.matchHeight * 0.25,
+            winnerColor
+        );
+        // Runner-up C → QF1 (team2 slot)
+        drawLine(
+            groupPositions['C'].x + groupWidth, groupPositions['C'].y + groupHeight * 0.65,
+            qfLeftX, qf1Y + this.matchHeight * 0.75,
+            runnerUpColor
+        );
 
-        // Group D → QF2 (Runner-up D to top right QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + groupHeight / 3);
-        this.ctx.lineTo(qfRightX + this.matchWidth, qf2Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
+        // ── Right side: Group B (top) & Group D (bottom) → QF2 & QF4 ───
+        // Winner B → QF2 (team1 slot)
+        drawLine(
+            groupPositions['B'].x, groupPositions['B'].y + groupHeight * 0.35,
+            qfRightX + this.matchWidth, qf2Y + this.matchHeight * 0.25,
+            winnerColor
+        );
+        // Runner-up B → QF4 (team2 slot)
+        drawLine(
+            groupPositions['B'].x, groupPositions['B'].y + groupHeight * 0.65,
+            qfRightX + this.matchWidth, qf4Y + this.matchHeight * 0.75,
+            runnerUpColor
+        );
+        // Winner D → QF4 (team1 slot)
+        drawLine(
+            groupPositions['D'].x, groupPositions['D'].y + groupHeight * 0.35,
+            qfRightX + this.matchWidth, qf4Y + this.matchHeight * 0.25,
+            winnerColor
+        );
+        // Runner-up D → QF2 (team2 slot)
+        drawLine(
+            groupPositions['D'].x, groupPositions['D'].y + groupHeight * 0.65,
+            qfRightX + this.matchWidth, qf2Y + this.matchHeight * 0.75,
+            runnerUpColor
+        );
 
-        // Group C → QF3 (Winner C to bottom left QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['C'].x, groupPositions['C'].y + (groupHeight * 2 / 3));
-        this.ctx.lineTo(qfLeftX, qf3Y + this.matchHeight / 3);
-        this.ctx.stroke();
-
-        // Group A → QF3 (Runner-up A to bottom left QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['A'].x + groupWidth, groupPositions['A'].y + (groupHeight * 2 / 3));
-        this.ctx.lineTo(qfLeftX + this.matchWidth, qf3Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
-
-        // Group D → QF4 (Winner D to bottom right QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['D'].x, groupPositions['D'].y + (groupHeight * 2 / 3));
-        this.ctx.lineTo(qfRightX, qf4Y + this.matchHeight / 3);
-        this.ctx.stroke();
-
-        // Group B → QF4 (Runner-up B to bottom right QF)
-        this.ctx.beginPath();
-        this.ctx.moveTo(groupPositions['B'].x + groupWidth, groupPositions['B'].y + (groupHeight * 2 / 3));
-        this.ctx.lineTo(qfRightX + this.matchWidth, qf4Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
 
         // Quarter-finals to Semi-finals
+        const connectorColor = '#64748b';
         // QF1 → Semi 1
-        this.ctx.beginPath();
-        this.ctx.moveTo(qfLeftX + this.matchWidth, qf1Y + this.matchHeight / 2);
-        this.ctx.lineTo(semiLeftX, semi1Y + this.matchHeight / 3);
-        this.ctx.stroke();
-
+        drawLine(qfLeftX + this.matchWidth, qf1Y + this.matchHeight / 2, semiLeftX, semi1Y + this.matchHeight / 3, connectorColor);
         // QF3 → Semi 1
-        this.ctx.beginPath();
-        this.ctx.moveTo(qfLeftX + this.matchWidth, qf3Y + this.matchHeight / 2);
-        this.ctx.lineTo(semiLeftX, semi1Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
-
+        drawLine(qfLeftX + this.matchWidth, qf3Y + this.matchHeight / 2, semiLeftX, semi1Y + this.matchHeight * 2 / 3, connectorColor);
         // QF2 → Semi 2
-        this.ctx.beginPath();
-        this.ctx.moveTo(qfRightX, qf2Y + this.matchHeight / 2);
-        this.ctx.lineTo(semiRightX + this.matchWidth, semi2Y + this.matchHeight / 3);
-        this.ctx.stroke();
-
+        drawLine(qfRightX, qf2Y + this.matchHeight / 2, semiRightX + this.matchWidth, semi2Y + this.matchHeight / 3, connectorColor);
         // QF4 → Semi 2
-        this.ctx.beginPath();
-        this.ctx.moveTo(qfRightX, qf4Y + this.matchHeight / 2);
-        this.ctx.lineTo(semiRightX + this.matchWidth, semi2Y + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
+        drawLine(qfRightX, qf4Y + this.matchHeight / 2, semiRightX + this.matchWidth, semi2Y + this.matchHeight * 2 / 3, connectorColor);
 
         // Semi-finals to Finals
-        // Semi 1 → Finals
-        this.ctx.beginPath();
-        this.ctx.moveTo(semiLeftX + this.matchWidth, semi1Y + this.matchHeight / 2);
-        this.ctx.lineTo(finalsX, finalsY + this.matchHeight / 3);
-        this.ctx.stroke();
+        // Semi 1 → Finals (left side)
+        drawLine(semiLeftX + this.matchWidth, semi1Y + this.matchHeight / 2, finalsX, finalsY + this.matchHeight / 3, connectorColor);
+        // Semi 2 → Finals (right side)
+        drawLine(semiRightX, semi2Y + this.matchHeight / 2, finalsX + this.matchWidth, finalsY + this.matchHeight * 2 / 3, connectorColor);
 
-        // Semi 2 → Finals
-        this.ctx.beginPath();
-        this.ctx.moveTo(semiRightX, semi2Y + this.matchHeight / 2);
-        this.ctx.lineTo(finalsX + this.matchWidth, finalsY + (this.matchHeight * 2 / 3));
-        this.ctx.stroke();
 
         // Restore context
         this.ctx.restore();
 
+        // Draw legend (outside pan/zoom transform)
+        const legendX = 10, legendY = 10;
+        this.ctx.font = 'bold 11px Arial';
+        this.ctx.fillStyle = '#3b82f6';
+        this.ctx.fillRect(legendX, legendY, 20, 3);
+        this.ctx.fillText('Winner', legendX + 25, legendY + 4);
+        this.ctx.fillStyle = '#f97316';
+        this.ctx.fillRect(legendX, legendY + 14, 20, 3);
+        this.ctx.fillText('Runner-up', legendX + 25, legendY + 18);
+
         // Draw zoom indicator
         this.drawZoomIndicator();
+
     }
 
     /**

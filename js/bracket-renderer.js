@@ -1057,13 +1057,13 @@ class BracketRenderer {
         const groupWidth = 200;
         const groupHeight = 280;
         const horizontalGap = 180;
-        const centerY = height / (2 * this.zoom) - this.panY / this.zoom;
+        const centerY = height / (2 * this.zoom);
         const leftX = 50;
 
         // Calculate positions
         const groupsLeftX = leftX;
-        const groupsRightX = width / this.zoom - this.panX / this.zoom - groupWidth - leftX;
-        const finalsX = (width / this.zoom - this.panX / this.zoom - this.matchWidth) / 2;
+        const groupsRightX = width / this.zoom - groupWidth - leftX;
+        const finalsX = (width / this.zoom - this.matchWidth) / 2;
 
         // Position groups: A on left, B on right
         const groupPositions = {

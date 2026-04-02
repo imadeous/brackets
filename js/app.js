@@ -635,7 +635,7 @@ function tournamentApp() {
         getGroupStandings(group) {
             // Force Alpine.js to track updateCounter as a dependency
             const _ = this.updateCounter;
-            if (this.tournament.bracketFormat === 'group-stage') {
+            if (this.tournament.bracketFormat === 'group-stage' || this.tournament.bracketFormat === 'two-group') {
                 return this.tournament.getGroupStandings(group);
             }
             return [];
@@ -649,6 +649,12 @@ function tournamentApp() {
             const _ = this.updateCounter;
             if (this.tournament.bracketFormat === 'group-stage') {
                 return ['A', 'B', 'C', 'D'].map(group => ({
+                    group,
+                    standings: this.tournament.getGroupStandings(group)
+                }));
+            }
+            if (this.tournament.bracketFormat === 'two-group') {
+                return ['A', 'B'].map(group => ({
                     group,
                     standings: this.tournament.getGroupStandings(group)
                 }));

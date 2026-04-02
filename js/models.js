@@ -546,106 +546,41 @@ class Tournament {
     checkAndCreateGroupStageKnockouts() {
         if (this.bracketFormat !== 'group-stage') return;
 
-        // Check if all group matches are complete
+        // Ensure knockout shell exists so slots can be filled as soon as each group completes
+        const qf1 = this.getOrCreateMatch('qf-1', 2, 1, 'quarter-finals');
+        const qf2 = this.getOrCreateMatch('qf-2', 2, 2, 'quarter-finals');
+        const qf3 = this.getOrCreateMatch('qf-3', 2, 3, 'quarter-finals');
+        const qf4 = this.getOrCreateMatch('qf-4', 2, 4, 'quarter-finals');
+        this.getOrCreateMatch('semi-1', 3, 1, 'semi-finals');
+        this.getOrCreateMatch('semi-2', 3, 2, 'semi-finals');
+        this.getOrCreateMatch('final', 4, 1, 'finals');
+
+        const groupComplete = {
+            A: this.isGroupComplete('A'),
+            B: this.isGroupComplete('B'),
+            C: this.isGroupComplete('C'),
+            D: this.isGroupComplete('D')
+        };
+
+        const groupWinners = {};
+        const groupRunnerUps = {};
+
+        ['A', 'B', 'C', 'D'].forEach(group => {
+            if (groupComplete[group]) {
+                groupWinners[group] = this.getGroupWinner(group);
+                groupRunnerUps[group] = this.getGroupRunnerUp(group);
+            }
+        });
+
+        // Fill quarter-final slots progressively as groups become complete
+        this.setMatchTeams(qf1, groupWinners.A || null, groupRunnerUps.C || null);
+        this.setMatchTeams(qf2, groupWinners.B || null, groupRunnerUps.D || null);
+        this.setMatchTeams(qf3, groupWinners.C || null, groupRunnerUps.A || null);
+        this.setMatchTeams(qf4, groupWinners.D || null, groupRunnerUps.B || null);
+
+        // Mark full group stage completion once all group matches are complete
         const groupMatches = this.matches.filter(m => m.stage && m.stage.startsWith('group-'));
-        const allComplete = groupMatches.every(m => m.isComplete);
-
-        if (allComplete && !this.roundRobinComplete) {
-            this.roundRobinComplete = true;
-
-            // Get winners and runner-ups from each group
-            const groups = ['A', 'B', 'C', 'D'];
-            const groupWinners = {};
-            const groupRunnerUps = {};
-
-            for (const group of groups) {
-                const winner = this.getGroupWinner(group);
-                const runnerUp = this.getGroupRunnerUp(group);
-                if (winner) groupWinners[group] = winner;
-                if (runnerUp) groupRunnerUps[group] = runnerUp;
-            }
-
-            // Create Quarter-finals with the specified matchups
-            if (groupWinners.A && groupWinners.B && groupWinners.C && groupWinners.D &&
-                groupRunnerUps.A && groupRunnerUps.B && groupRunnerUps.C && groupRunnerUps.D) {
-
-                // QF1: Winner A vs Runner-up C
-                const qf1 = new Match(
-                    'qf-1',
-                    groupWinners.A,
-                    groupRunnerUps.C,
-                    2, // Round 2 = Quarter-finals
-                    1,
-                    'quarter-finals'
-                );
-                this.matches.push(qf1);
-
-                // QF2: Winner B vs Runner-up D
-                const qf2 = new Match(
-                    'qf-2',
-                    groupWinners.B,
-                    groupRunnerUps.D,
-                    2, // Round 2 = Quarter-finals
-                    2,
-                    'quarter-finals'
-                );
-                this.matches.push(qf2);
-
-                // QF3: Winner C vs Runner-up A
-                const qf3 = new Match(
-                    'qf-3',
-                    groupWinners.C,
-                    groupRunnerUps.A,
-                    2, // Round 2 = Quarter-finals
-                    3,
-                    'quarter-finals'
-                );
-                this.matches.push(qf3);
-
-                // QF4: Winner D vs Runner-up B
-                const qf4 = new Match(
-                    'qf-4',
-                    groupWinners.D,
-                    groupRunnerUps.B,
-                    2, // Round 2 = Quarter-finals
-                    4,
-                    'quarter-finals'
-                );
-                this.matches.push(qf4);
-
-                // Create placeholder semi-finals (QF1 winner vs QF3 winner, QF2 winner vs QF4 winner)
-                const semi1 = new Match(
-                    'semi-1',
-                    null,
-                    null,
-                    3, // Round 3 = Semi-finals
-                    1,
-                    'semi-finals'
-                );
-                this.matches.push(semi1);
-
-                const semi2 = new Match(
-                    'semi-2',
-                    null,
-                    null,
-                    3, // Round 3 = Semi-finals
-                    2,
-                    'semi-finals'
-                );
-                this.matches.push(semi2);
-
-                // Create placeholder for finals
-                const final = new Match(
-                    'final',
-                    null,
-                    null,
-                    4, // Round 4 = Finals
-                    1,
-                    'finals'
-                );
-                this.matches.push(final);
-            }
-        }
+        this.roundRobinComplete = groupMatches.length > 0 && groupMatches.every(m => m.isComplete);
     }
 
     /**
@@ -654,36 +589,76 @@ class Tournament {
     checkAndCreateTwoGroupKnockouts() {
         if (this.bracketFormat !== 'two-group') return;
 
-        // Check if all group matches are complete
-        const groupMatches = this.matches.filter(m => m.stage && m.stage.startsWith('group-'));
-        const allComplete = groupMatches.every(m => m.isComplete);
+        const final = this.getOrCreateMatch('final', 2, 1, 'finals');
 
-        if (allComplete && !this.roundRobinComplete) {
-            this.roundRobinComplete = true;
+        const groupAComplete = this.isGroupComplete('A');
+        const groupBComplete = this.isGroupComplete('B');
 
-            // Get winners from each group
-            const groups = ['A', 'B'];
-            const groupWinners = {};
+        const groupAWinner = groupAComplete ? this.getGroupWinner('A') : null;
+        const groupBWinner = groupBComplete ? this.getGroupWinner('B') : null;
 
-            for (const group of groups) {
-                const winner = this.getGroupWinner(group);
-                if (winner) groupWinners[group] = winner;
+        // Fill finals slots as soon as each group has a confirmed winner
+        this.setMatchTeams(final, groupAWinner, groupBWinner);
+
+        // Full group stage completion means both groups are fully complete
+        this.roundRobinComplete = groupAComplete && groupBComplete;
+    }
+
+    /**
+     * Return true when all matches in a group are complete
+     */
+    isGroupComplete(group) {
+        const groupMatches = this.matches.filter(m => m.stage === `group-${group}`);
+        return groupMatches.length > 0 && groupMatches.every(m => m.isComplete);
+    }
+
+    /**
+     * Get an existing match by id or create it if missing
+     */
+    getOrCreateMatch(id, round, matchNumber, stage) {
+        let match = this.matches.find(m => m.id === id);
+        if (!match) {
+            match = new Match(id, null, null, round, matchNumber, stage);
+            this.matches.push(match);
+        }
+        return match;
+    }
+
+    /**
+     * Update match participants and reset result if the slot changed
+     */
+    setMatchTeams(match, team1Id, team2Id) {
+        const teamsChanged = match.team1Id !== team1Id || match.team2Id !== team2Id;
+        if (!teamsChanged) return;
+
+        // Roll back previously applied stats before changing participants
+        if (match.statsApplied && match.winner) {
+            const previousWinnerTeam = this.teams.find(t => t.id === match.winner);
+            const previousLoserId = match.winner === match.team1Id ? match.team2Id : match.team1Id;
+            const previousLoserTeam = this.teams.find(t => t.id === previousLoserId);
+
+            if (previousWinnerTeam) {
+                previousWinnerTeam.wins = Math.max(0, previousWinnerTeam.wins - 1);
+                previousWinnerTeam.points = Math.max(0, previousWinnerTeam.points - 3);
             }
-
-            // Create Finals with group winners
-            if (groupWinners.A && groupWinners.B) {
-                // Final: Winner A vs Winner B
-                const final = new Match(
-                    'final',
-                    groupWinners.A,
-                    groupWinners.B,
-                    2, // Round 2 = Finals
-                    1,
-                    'finals'
-                );
-                this.matches.push(final);
+            if (previousLoserTeam) {
+                previousLoserTeam.losses = Math.max(0, previousLoserTeam.losses - 1);
             }
         }
+
+        match.team1Id = team1Id;
+        match.team2Id = team2Id;
+
+        // If participants changed, clear previous result to avoid stale advancement
+        match.team1Set1 = null;
+        match.team1Set2 = null;
+        match.team1Set3 = null;
+        match.team2Set1 = null;
+        match.team2Set2 = null;
+        match.team2Set3 = null;
+        match.winner = null;
+        match.isComplete = false;
+        match.statsApplied = false;
     }
 
     /**
@@ -737,7 +712,7 @@ class Tournament {
                 teamName: team.name,
                 wins: team.wins,
                 losses: team.losses,
-                points: team.points,
+                points: Number.isFinite(team.points) ? team.points : (team.wins * 3),
                 rank: index + 1,
                 isWinner: index === 0
             }));
@@ -804,7 +779,7 @@ class Tournament {
                 teamName: team.name,
                 wins: team.wins,
                 losses: team.losses,
-                points: team.points,
+                points: Number.isFinite(team.points) ? team.points : (team.wins * 3),
                 rank: index + 1,
                 status: this.getTeamStatus(team)
             }));
@@ -899,6 +874,7 @@ class Tournament {
             .map(team => ({
                 teamId: team.id,
                 teamName: team.name,
+                points: Number.isFinite(team.points) ? team.points : (team.wins * 3),
                 wins: team.wins,
                 losses: team.losses,
                 status: this.getTeamStatus(team)

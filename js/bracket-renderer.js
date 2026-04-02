@@ -526,6 +526,59 @@ class BracketRenderer {
     }
 
     /**
+     * Draw compact group standings list with points
+     */
+    drawGroupPointsList(group, x, y, width, height, colors) {
+        const standings = this.app.getGroupStandings(group);
+
+        this.ctx.fillStyle = '#6b7280';
+        this.ctx.font = '11px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(`${standings.length} teams`, x + width / 2, y + 50);
+
+        // Column headers
+        this.ctx.fillStyle = '#4b5563';
+        this.ctx.font = 'bold 10px Arial';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText('Team', x + 10, y + 70);
+        this.ctx.textAlign = 'right';
+        this.ctx.fillText('Pts', x + width - 10, y + 70);
+
+        const maxTeamsToShow = 8;
+        const teamsToShow = standings.slice(0, maxTeamsToShow);
+
+        teamsToShow.forEach((standing, index) => {
+            const yPos = y + 90 + index * 22;
+            if (yPos + 12 > y + height - 10) return;
+
+            const isTopTwo = standing.rank <= 2;
+            this.ctx.fillStyle = isTopTwo ? colors.text : '#6b7280';
+            this.ctx.font = isTopTwo ? 'bold 10px Arial' : '10px Arial';
+
+            const shortName = standing.teamName.length > 16
+                ? standing.teamName.substring(0, 16) + '...'
+                : standing.teamName;
+
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(`${standing.rank}. ${shortName}`, x + 10, yPos);
+
+            this.ctx.textAlign = 'right';
+            const points = Number.isFinite(standing.points) ? standing.points : ((standing.wins || 0) * 3);
+            this.ctx.fillText(String(points), x + width - 10, yPos);
+        });
+
+        if (standings.length > maxTeamsToShow) {
+            const remainingCount = standings.length - maxTeamsToShow;
+            this.ctx.fillStyle = '#9ca3af';
+            this.ctx.font = 'italic 10px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`+${remainingCount} more`, x + width / 2, y + height - 12);
+        }
+
+        this.ctx.textAlign = 'left';
+    }
+
+    /**
      * Draw connector line between matches
      */
     drawConnectorLine(x1, y1, x2, y2) {
@@ -696,10 +749,9 @@ class BracketRenderer {
             'D': { x: groupsRightX, y: centerY + verticalSpacing / 2 }
         };
 
-        // Draw each group - showing matches instead of standings
+        // Draw each group - showing team points standings
         groups.forEach(group => {
             const pos = groupPositions[group];
-            const groupMatches = this.app.getGroupMatches(group);
             const colors = groupColors[group];
 
             // Draw group container
@@ -721,66 +773,7 @@ class BracketRenderer {
             this.ctx.font = '12px Arial';
             this.ctx.fillText('Group Stage', pos.x + groupWidth / 2, pos.y - 10);
 
-            // Draw match count
-            this.ctx.fillStyle = '#6b7280';
-            this.ctx.font = '11px Arial';
-            this.ctx.fillText(`${groupMatches.length} matches`, pos.x + groupWidth / 2, pos.y + 50);
-            this.ctx.textAlign = 'left';
-
-            // Draw compact match list
-            this.ctx.fillStyle = '#374151';
-            this.ctx.font = '10px Arial';
-
-            const maxMatchesToShow = 8;
-            const matchesToShow = groupMatches.slice(0, maxMatchesToShow);
-
-            matchesToShow.forEach((match, index) => {
-                const yPos = pos.y + 70 + index * 24;
-
-                // Check if we're within bounds
-                if (yPos + 20 > pos.y + groupHeight - 10) return;
-
-                const team1Name = this.app.getTeamName(match.team1Id);
-                const team2Name = this.app.getTeamName(match.team2Id);
-
-                // Highlight winner
-                if (match.winner) {
-                    this.ctx.fillStyle = colors.text;
-                    this.ctx.font = 'bold 10px Arial';
-                } else if (match.hasScores && match.hasScores()) {
-                    this.ctx.fillStyle = '#3b82f6';
-                    this.ctx.font = '10px Arial';
-                } else {
-                    this.ctx.fillStyle = '#6b7280';
-                    this.ctx.font = '10px Arial';
-                }
-
-                // Truncate names
-                const displayName1 = team1Name.length > 8 ? team1Name.substring(0, 8) + '...' : team1Name;
-                const displayName2 = team2Name.length > 8 ? team2Name.substring(0, 8) + '...' : team2Name;
-
-                this.ctx.fillText(`${displayName1} vs ${displayName2}`, pos.x + 10, yPos);
-
-                // Show result if available
-                if (match.winner) {
-                    this.ctx.fillStyle = '#16a34a';
-                    this.ctx.font = 'bold 9px Arial';
-                    this.ctx.fillText('✓', pos.x + groupWidth - 20, yPos);
-                } else if (match.hasScores && match.hasScores()) {
-                    this.ctx.fillStyle = '#3b82f6';
-                    this.ctx.font = '9px Arial';
-                    this.ctx.fillText('•', pos.x + groupWidth - 20, yPos);
-                }
-            });
-
-            // Show "+X more" if there are more matches
-            if (groupMatches.length > maxMatchesToShow) {
-                const remainingCount = groupMatches.length - maxMatchesToShow;
-                this.ctx.fillStyle = '#9ca3af';
-                this.ctx.font = 'italic 10px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText(`+${remainingCount} more`, pos.x + groupWidth / 2, pos.y + groupHeight - 15);
-            }
+            this.drawGroupPointsList(group, pos.x, pos.y, groupWidth, groupHeight, colors);
         });
 
         // Draw finals in the center - ALWAYS show (with TBD if not created)
@@ -1074,10 +1067,7 @@ class BracketRenderer {
         // Draw each group
         groups.forEach(group => {
             const pos = groupPositions[group];
-            const groupMatches = this.app.getGroupMatches(group);
             const colors = groupColors[group];
-
-            console.log(`Group ${group}: Found ${groupMatches.length} matches`, groupMatches);
 
             // Draw group container
             this.ctx.fillStyle = colors.bg;
@@ -1098,65 +1088,7 @@ class BracketRenderer {
             this.ctx.font = '12px Arial';
             this.ctx.fillText('Group Stage', pos.x + groupWidth / 2, pos.y - 10);
 
-            // Draw match count
-            this.ctx.fillStyle = '#6b7280';
-            this.ctx.font = '11px Arial';
-            this.ctx.fillText(`${groupMatches.length} matches`, pos.x + groupWidth / 2, pos.y + 50);
-            this.ctx.textAlign = 'left';
-
-            // Draw compact match list
-            this.ctx.fillStyle = '#374151';
-            this.ctx.font = '10px Arial';
-
-            const maxMatchesToShow = 8;
-            const matchesToShow = groupMatches.slice(0, maxMatchesToShow);
-
-            matchesToShow.forEach((match, index) => {
-                const yPos = pos.y + 70 + index * 24;
-
-                if (yPos + 20 > pos.y + groupHeight - 10) return;
-
-                const team1Name = this.app.getTeamName(match.team1Id);
-                const team2Name = this.app.getTeamName(match.team2Id);
-
-                // Highlight winner
-                if (match.winner) {
-                    this.ctx.fillStyle = colors.text;
-                    this.ctx.font = 'bold 10px Arial';
-                } else if (match.hasScores && match.hasScores()) {
-                    this.ctx.fillStyle = '#3b82f6';
-                    this.ctx.font = '10px Arial';
-                } else {
-                    this.ctx.fillStyle = '#6b7280';
-                    this.ctx.font = '10px Arial';
-                }
-
-                // Truncate names
-                const displayName1 = team1Name.length > 8 ? team1Name.substring(0, 8) + '...' : team1Name;
-                const displayName2 = team2Name.length > 8 ? team2Name.substring(0, 8) + '...' : team2Name;
-
-                this.ctx.fillText(`${displayName1} vs ${displayName2}`, pos.x + 10, yPos);
-
-                // Show result if available
-                if (match.winner) {
-                    this.ctx.fillStyle = '#16a34a';
-                    this.ctx.font = 'bold 9px Arial';
-                    this.ctx.fillText('✓', pos.x + groupWidth - 20, yPos);
-                } else if (match.hasScores && match.hasScores()) {
-                    this.ctx.fillStyle = '#3b82f6';
-                    this.ctx.font = '9px Arial';
-                    this.ctx.fillText('•', pos.x + groupWidth - 20, yPos);
-                }
-            });
-
-            // Show "+X more" if there are more matches
-            if (groupMatches.length > maxMatchesToShow) {
-                const remainingCount = groupMatches.length - maxMatchesToShow;
-                this.ctx.fillStyle = '#9ca3af';
-                this.ctx.font = 'italic 10px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText(`+${remainingCount} more`, pos.x + groupWidth / 2, pos.y + groupHeight - 15);
-            }
+            this.drawGroupPointsList(group, pos.x, pos.y, groupWidth, groupHeight, colors);
         });
 
         // Draw finals in the center

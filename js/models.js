@@ -668,8 +668,14 @@ class Tournament {
         const teamsChanged = match.team1Id !== team1Id || match.team2Id !== team2Id;
         if (!teamsChanged) return;
 
-        // Roll back previously applied stats before changing participants
-        if (match.statsApplied && match.winner) {
+        const hadTeam1 = !!match.team1Id;
+        const hadTeam2 = !!match.team2Id;
+        const replacingTeam1 = hadTeam1 && match.team1Id !== team1Id;
+        const replacingTeam2 = hadTeam2 && match.team2Id !== team2Id;
+        const shouldResetMatch = replacingTeam1 || replacingTeam2;
+
+        // Roll back previously applied stats only if an existing participant is actually being replaced/removed
+        if (shouldResetMatch && match.statsApplied && match.winner) {
             const previousWinnerTeam = this.teams.find(t => t.id === match.winner);
             const previousLoserId = match.winner === match.team1Id ? match.team2Id : match.team1Id;
             const previousLoserTeam = this.teams.find(t => t.id === previousLoserId);
@@ -686,70 +692,91 @@ class Tournament {
         match.team1Id = team1Id;
         match.team2Id = team2Id;
 
-        // If participants changed, clear previous result to avoid stale advancement
-        match.team1Set1 = null;
-        match.team1Set2 = null;
-        match.team1Set3 = null;
-        match.team2Set1 = null;
-        match.team2Set2 = null;
-        match.team2Set3 = null;
-        match.winner = null;
-        match.isComplete = false;
-        match.statsApplied = false;
+        // Preserve saved form values when slots are merely being populated.
+        // Only reset if a real assigned participant was replaced or removed.
+        if (shouldResetMatch) {
+            match.team1Set1 = null;
+            match.team1Set2 = null;
+            match.team1Set3 = null;
+            match.team2Set1 = null;
+            match.team2Set2 = null;
+            match.team2Set3 = null;
+            match.winner = null;
+            match.isComplete = false;
+            match.statsApplied = false;
+        }
     }
 
     /**
      * Get the winner of a specific group
      */
     getGroupWinner(group) {
-        const groupTeams = this.teams.filter(t => t.group === group);
-        if (groupTeams.length === 0) return null;
-
-        // Sort by points, then wins, then losses
-        const sorted = [...groupTeams].sort((a, b) => {
-            if (b.points !== a.points) return b.points - a.points;
-            if (b.wins !== a.wins) return b.wins - a.wins;
-            return a.losses - b.losses;
-        });
-
-        return sorted[0].id;
+        const standings = this.getGroupStandings(group);
+        return standings.length > 0 ? standings[0].teamId : null;
     }
 
     /**
      * Get the runner-up (2nd place) of a specific group
      */
     getGroupRunnerUp(group) {
-        const groupTeams = this.teams.filter(t => t.group === group);
-        if (groupTeams.length < 2) return null;
+        const standings = this.getGroupStandings(group);
+        return standings.length > 1 ? standings[1].teamId : null;
+    }
 
-        // Sort by points, then wins, then losses
-        const sorted = [...groupTeams].sort((a, b) => {
-            if (b.points !== a.points) return b.points - a.points;
-            if (b.wins !== a.wins) return b.wins - a.wins;
-            return a.losses - b.losses;
+    /**
+     * Compute group-only stats from matches in that specific group
+     */
+    getGroupStats(group) {
+        const groupTeams = this.teams.filter(t => t.group === group);
+        const groupMatches = this.matches.filter(m => m.stage === `group-${group}`);
+        const statsByTeamId = {};
+
+        groupTeams.forEach(team => {
+            statsByTeamId[team.id] = {
+                teamId: team.id,
+                teamName: team.name,
+                wins: 0,
+                losses: 0,
+                points: 0
+            };
         });
 
-        return sorted[1].id;
+        groupMatches.forEach(match => {
+            if (!match.winner) return;
+
+            const loserId = match.winner === match.team1Id ? match.team2Id : match.team1Id;
+
+            if (statsByTeamId[match.winner]) {
+                statsByTeamId[match.winner].wins += 1;
+                statsByTeamId[match.winner].points += 3;
+            }
+
+            if (statsByTeamId[loserId]) {
+                statsByTeamId[loserId].losses += 1;
+            }
+        });
+
+        return Object.values(statsByTeamId);
     }
 
     /**
      * Get standings for a specific group
      */
     getGroupStandings(group) {
-        const groupTeams = this.teams.filter(t => t.group === group);
+        const groupStats = this.getGroupStats(group);
 
-        return [...groupTeams]
+        return [...groupStats]
             .sort((a, b) => {
                 if (b.points !== a.points) return b.points - a.points;
                 if (b.wins !== a.wins) return b.wins - a.wins;
                 return a.losses - b.losses;
             })
-            .map((team, index) => ({
-                teamId: team.id,
-                teamName: team.name,
-                wins: team.wins,
-                losses: team.losses,
-                points: Number.isFinite(team.points) ? team.points : (team.wins * 3),
+            .map((teamStats, index) => ({
+                teamId: teamStats.teamId,
+                teamName: teamStats.teamName,
+                wins: teamStats.wins,
+                losses: teamStats.losses,
+                points: teamStats.points,
                 rank: index + 1,
                 isWinner: index === 0,
                 isQuarterFinalist: this.bracketFormat === 'group-stage' && this.isGroupComplete(group) && index < 2
@@ -915,6 +942,37 @@ class Tournament {
      * Get current standings
      */
     getStandings() {
+        if (this.bracketFormat === 'group-stage' || this.bracketFormat === 'two-group') {
+            return this.teams
+                .map(team => {
+                    if (!team.group) {
+                        return {
+                            teamId: team.id,
+                            teamName: team.name,
+                            points: 0,
+                            wins: 0,
+                            losses: 0,
+                            status: this.getTeamStatus(team)
+                        };
+                    }
+
+                    const groupStats = this.getGroupStats(team.group).find(stats => stats.teamId === team.id);
+                    return {
+                        teamId: team.id,
+                        teamName: team.name,
+                        points: groupStats ? groupStats.points : 0,
+                        wins: groupStats ? groupStats.wins : 0,
+                        losses: groupStats ? groupStats.losses : 0,
+                        status: this.getTeamStatus(team)
+                    };
+                })
+                .sort((a, b) => {
+                    if (b.points !== a.points) return b.points - a.points;
+                    if (b.wins !== a.wins) return b.wins - a.wins;
+                    return a.losses - b.losses;
+                });
+        }
+
         return [...this.teams]
             .sort((a, b) => {
                 // Sort by wins (descending), then by losses (ascending)

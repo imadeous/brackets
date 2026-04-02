@@ -559,8 +559,10 @@ class BracketRenderer {
                 ? standing.teamName.substring(0, 16) + '...'
                 : standing.teamName;
 
+            const qfLabel = standing.isQuarterFinalist ? ' [QF]' : '';
+
             this.ctx.textAlign = 'left';
-            this.ctx.fillText(`${standing.rank}. ${shortName}`, x + 10, yPos);
+            this.ctx.fillText(`${standing.rank}. ${shortName}${qfLabel}`, x + 10, yPos);
 
             this.ctx.textAlign = 'right';
             const points = Number.isFinite(standing.points) ? standing.points : ((standing.wins || 0) * 3);

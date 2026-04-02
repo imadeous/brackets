@@ -425,6 +425,14 @@ function tournamentApp() {
             // Force Alpine.js to track updateCounter as a dependency
             const _ = this.updateCounter;
 
+            // Defensive: Reconcile progressive knockout slots from current results
+            if (this.tournament.isSetup && this.tournament.bracketFormat === 'group-stage') {
+                this.tournament.checkAndCreateGroupStageKnockouts();
+            }
+            if (this.tournament.isSetup && this.tournament.bracketFormat === 'two-group') {
+                this.tournament.checkAndCreateTwoGroupKnockouts();
+            }
+
             // Defensive: Ensure group-stage tournaments have 4 rounds
             if (this.tournament.bracketFormat === 'group-stage' && this.tournament.isSetup) {
                 if (this.tournament.totalRounds !== 4) {

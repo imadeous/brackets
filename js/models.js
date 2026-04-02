@@ -470,6 +470,9 @@ class Tournament {
                 } else {
                     // Advance winner in elimination formats
                     this.advanceWinner(existingMatch);
+                    if (this.bracketFormat === 'group-stage') {
+                        this.syncGroupStageProgression();
+                    }
                 }
             } else if (existingMatch.winner && hadStatsApplied && existingMatch.winner !== previousWinner) {
                 // Winner changed - need to reverse old stats and apply new ones
@@ -512,6 +515,9 @@ class Tournament {
                 } else {
                     // Advance winner in elimination formats
                     this.advanceWinner(existingMatch);
+                    if (this.bracketFormat === 'group-stage') {
+                        this.syncGroupStageProgression();
+                    }
                 }
             }
         }
@@ -578,9 +584,40 @@ class Tournament {
         this.setMatchTeams(qf3, groupWinners.C || null, groupRunnerUps.A || null);
         this.setMatchTeams(qf4, groupWinners.D || null, groupRunnerUps.B || null);
 
+        // Keep downstream progression (QF -> SF -> Final) in sync with completed winners
+        this.syncGroupStageProgression();
+
         // Mark full group stage completion once all group matches are complete
         const groupMatches = this.matches.filter(m => m.stage && m.stage.startsWith('group-'));
         this.roundRobinComplete = groupMatches.length > 0 && groupMatches.every(m => m.isComplete);
+    }
+
+    /**
+     * Synchronize group-stage knockout progression based on current match winners
+     */
+    syncGroupStageProgression() {
+        if (this.bracketFormat !== 'group-stage') return;
+
+        const qf1 = this.matches.find(m => m.id === 'qf-1');
+        const qf2 = this.matches.find(m => m.id === 'qf-2');
+        const qf3 = this.matches.find(m => m.id === 'qf-3');
+        const qf4 = this.matches.find(m => m.id === 'qf-4');
+
+        const semi1 = this.getOrCreateMatch('semi-1', 3, 1, 'semi-finals');
+        const semi2 = this.getOrCreateMatch('semi-2', 3, 2, 'semi-finals');
+        const final = this.getOrCreateMatch('final', 4, 1, 'finals');
+
+        const semi1Team1 = qf1 && qf1.winner ? qf1.winner : null;
+        const semi1Team2 = qf3 && qf3.winner ? qf3.winner : null;
+        const semi2Team1 = qf2 && qf2.winner ? qf2.winner : null;
+        const semi2Team2 = qf4 && qf4.winner ? qf4.winner : null;
+
+        this.setMatchTeams(semi1, semi1Team1, semi1Team2);
+        this.setMatchTeams(semi2, semi2Team1, semi2Team2);
+
+        const finalTeam1 = semi1.winner || null;
+        const finalTeam2 = semi2.winner || null;
+        this.setMatchTeams(final, finalTeam1, finalTeam2);
     }
 
     /**
@@ -714,8 +751,21 @@ class Tournament {
                 losses: team.losses,
                 points: Number.isFinite(team.points) ? team.points : (team.wins * 3),
                 rank: index + 1,
-                isWinner: index === 0
+                isWinner: index === 0,
+                isQuarterFinalist: this.bracketFormat === 'group-stage' && this.isGroupComplete(group) && index < 2
             }));
+    }
+
+    /**
+     * Check if a team has qualified from a completed group to quarter-finals
+     */
+    isQualifiedGroupQuarterFinalist(team) {
+        if (this.bracketFormat !== 'group-stage' || !team.group) return false;
+        if (!this.isGroupComplete(team.group)) return false;
+
+        const groupStandings = this.getGroupStandings(team.group);
+        const position = groupStandings.findIndex(s => s.teamId === team.id);
+        return position >= 0 && position < 2;
     }
 
     /**
@@ -905,7 +955,8 @@ class Tournament {
 
         // Check if in quarter-finals
         const quarterMatches = this.matches.filter(m => m.stage === 'quarter-finals');
-        if (quarterMatches.some(m => !m.winner && (m.team1Id === team.id || m.team2Id === team.id))) {
+        if (this.isQualifiedGroupQuarterFinalist(team) ||
+            quarterMatches.some(m => !m.winner && (m.team1Id === team.id || m.team2Id === team.id))) {
             return 'Quarter-Finalist';
         }
 
